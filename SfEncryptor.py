@@ -38,9 +38,9 @@ from cryptography.exceptions import InvalidTag
 
 
 # --- Configuration and Global Settings ---
-APP_NAME = "SF FileManager"
-APP_VERSION = "3.0.1"
-DEVELOPER_NAME = "Surya B, Abishek Raj PR "
+APP_NAME = "SF Encryptor"
+APP_VERSION = "1.0.0"
+DEVELOPER_NAME = "Surya B "
 DEVELOPER_EMAIL = "myselfsuryaaz@gmail.com"
 GITHUB_URL = "https://github.com/Suryabx"
 PLUGINS_DIR = "plugins"
