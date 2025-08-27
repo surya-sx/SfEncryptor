@@ -38,15 +38,15 @@ from cryptography.exceptions import InvalidTag
 
 
 # --- Configuration and Global Settings ---
-APP_NAME = "Sf Encryptor"
-APP_VERSION = "1.0.0"
-DEVELOPER_NAME = "Surya B "
+APP_NAME = "SF FileManager"
+APP_VERSION = "3.0.1"
+DEVELOPER_NAME = "Surya B, Abishek Raj PR "
 DEVELOPER_EMAIL = "myselfsuryaaz@gmail.com"
 GITHUB_URL = "https://github.com/Suryabx"
 PLUGINS_DIR = "plugins"
 ASSETS_DIR = "assets"
-ICON_FILENAME = "icon.png"
-SF_LOGO_FILENAME = "sf_manager_logo.png"
+ICON_FILENAME = "Sf_encryptor.png"
+SF_LOGO_FILENAME = "Sf_encryptor.png"
 GITHUB_LOGO_FILENAME = "github_logo.png"
 
 # --- OS-Specific Directory Setup ---
@@ -1688,6 +1688,13 @@ class SFManagerModernUI(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         self.setCentralWidget(main_container)
+        
+        # Set window icon
+        icon_path = os.path.join(ASSETS_DIR, ICON_FILENAME)
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        else:
+            logger.warning(f"Application icon not found at {icon_path}.")
 
         # Sidebar widget for navigation
         self.sidebar_widget = QWidget()
