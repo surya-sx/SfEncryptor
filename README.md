@@ -1,4 +1,4 @@
-![logo](https://github.com/surya-sx/SfEncryptor/blob/main/assets/Sf_encryptor.png?raw=true)
+
 # SF Encryptor
 ### A modern, cross-platform file management and encryption suite built with PyQt6 and Cryptography.
 ---
