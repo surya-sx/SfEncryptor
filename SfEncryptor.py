@@ -14,7 +14,6 @@ import gzip
 import bz2
 import lzma
 from logging.handlers import RotatingFileHandler
-import requests
 
 # --- PyQt6 Imports ---
 from PyQt6.QtWidgets import (
@@ -26,21 +25,20 @@ from PyQt6.QtWidgets import (
     QToolButton, QStackedWidget
 )
 from PyQt6.QtGui import QPixmap, QIcon, QFont, QColor, QImage, QBrush, QGuiApplication, QAction
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
+
 # --- Cryptography Imports ---
-from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.exceptions import InvalidTag
-
+import secrets
 
 # --- Configuration and Global Settings ---
-APP_NAME = "SF Encryptor"
-APP_VERSION = "1.0.0"
-DEVELOPER_NAME = "Surya B "
+APP_NAME = "SF FileManager"
+APP_VERSION = "1.2.1.0"
+DEVELOPER_NAME = "Surya B"
 DEVELOPER_EMAIL = "myselfsuryaaz@gmail.com"
 GITHUB_URL = "https://github.com/Suryabx"
 PLUGINS_DIR = "plugins"
@@ -77,51 +75,50 @@ console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(
 if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
     logger.addHandler(console_handler)
 
-# --- NEW: Modern UI Theme ---
-THEME_PRIMARY_BG = "#f0f4f8"  # Light background
-THEME_SECONDARY_BG = "#eef2f6" # Lighter background for elements
-THEME_FOREGROUND = "#34495e"    # Dark text
-THEME_ACCENT = "#3498db"        # Blue accent for buttons and highlights
-THEME_ACCENT_DARK = "#2980b9"   # Darker blue for hover state
-THEME_BORDER = "#bdc3c7"        # Light gray border
+# --- Modern UI Theme ---
+THEME_PRIMARY_BG = "#e0f7fa"  # Lighter, more vibrant sky blue
+THEME_SECONDARY_BG = "#b2ebf2" # Brighter, slightly darker sky blue
+THEME_FOREGROUND = "#004d40"    # Dark teal for high contrast text
+THEME_ACCENT = "#00bcd4"        # Cyan for vibrant accents
+THEME_ACCENT_DARK = "#00838f"   # Darker cyan for hover
+THEME_BORDER = "#80deea"        # Light cyan border
 THEME_ERROR_RED = "#e74c3c"
 THEME_SUCCESS_GREEN = "#2ecc71"
 THEME_WARNING_ORANGE = "#f39c12"
 THEME_CARD_BG = "#ffffff"       # White card background with shadow
 THEME_SHADOW_COLOR = "#00000030" # Subtle shadow for depth
 
-# Base64 encode the SVGs once with respective colors
-MENU_ICON_SVG_BASE = """
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="lucide lucide-ellipsis-vertical"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-"""
-SIDEBAR_TOGGLE_SVG_BASE = """
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-"""
-GITHUB_SVG_BASE = """
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="lucide lucide-github"><path d="M15 22v-4.129a3.344 3.344 0 0 0-1.077-.923c-3.14-.84-5.467-3.21-5.467-6.027 0-1.332.613-2.58 1.63-3.48a6.002 6.002 0 0 0-.251-3.447s.823-.264 2.704.996a11.168 11.168 0 0 1 5.378 0c1.881-1.26 2.704-.996 2.704-.996a6.002 6.002 0 0 0-.251 3.447c1.017.9 1.63 2.148 1.63 3.48 0 2.817-2.327 5.187-5.467 6.027-.393.105-.758.33-.923.639v4.129H15zM7.25 15.25v-1.5a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75zM15 15.25v-1.5a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75z"/></svg>
-"""
-MAIL_SVG_BASE = """
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-"""
-SEND_SVG_BASE = """
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send"><path d="m22 2-7 19-3-6-6-3 19-7z"/><path d="M22 2 11 13"/></svg>
-"""
-DOWN_ARROW_SVG_BASE = """
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
-"""
-UPLOAD_SVG_BASE = """
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-"""
+BRIGHT_ARROW_COLOR = "#004d40" # Using the dark teal foreground color for contrast
 
-# Base64 encode the SVGs once with respective colors
-MENU_ICON_SVG = b64encode(MENU_ICON_SVG_BASE.replace('currentColor', THEME_FOREGROUND).encode()).decode()
-SIDEBAR_TOGGLE_SVG = b64encode(SIDEBAR_TOGGLE_SVG_BASE.replace('currentColor', THEME_FOREGROUND).encode()).decode()
-GITHUB_SVG = b64encode(GITHUB_SVG_BASE.replace('currentColor', THEME_FOREGROUND).encode()).decode()
-MAIL_SVG = b64encode(MAIL_SVG_BASE.replace('currentColor', THEME_FOREGROUND).encode()).decode()
-SEND_SVG = b64encode(SEND_SVG_BASE.replace('currentColor', THEME_FOREGROUND).encode()).decode()
-DOWN_ARROW_SVG = b64encode(DOWN_ARROW_SVG_BASE.replace('currentColor', THEME_FOREGROUND).encode()).decode()
-UPLOAD_SVG = b64encode(UPLOAD_SVG_BASE.replace('currentColor', THEME_FOREGROUND).encode()).decode()
-
+DOWN_ARROW_SVG_BASE = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{BRIGHT_ARROW_COLOR}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down-square"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m8 10 4 4 4-4"/></svg>
+"""
+MENU_ICON_SVG_BASE = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="{THEME_FOREGROUND}" stroke="none" class="lucide lucide-ellipsis-vertical"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+"""
+SIDEBAR_TOGGLE_SVG_BASE = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+"""
+GITHUB_SVG_BASE = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="{THEME_FOREGROUND}" stroke="none" class="lucide lucide-github"><path d="M15 22v-4.129a3.344 3.344 0 0 0-1.077-.923c-3.14-.84-5.467-3.21-5.467-6.027 0-1.332.613-2.58 1.63-3.48a6.002 6.002 0 0 0-.251-3.447s.823-.264 2.704.996a11.168 11.168 0 0 1 5.378 0c1.881-1.26 2.704-.996 2.704-.996a6.002 6.002 0 0 0-.251 3.447c1.017.9 1.63 2.148 1.63 3.48 0 2.817-2.327 5.187-5.467 6.027-.393.105-.758.33-.923.639v4.129H15zM7.25 15.25v-1.5a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75zM15 15.25v-1.5a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75z"/></svg>
+"""
+MAIL_SVG_BASE = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+"""
+SEND_SVG_BASE = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send"><path d="m22 2-7 19-3-6-6-3 19-7z"/><path d="M22 2 11 13"/></svg>
+"""
+UPLOAD_SVG_BASE = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+"""
+# Base64 encode the SVGs once
+MENU_ICON_SVG = b64encode(MENU_ICON_SVG_BASE.encode()).decode()
+SIDEBAR_TOGGLE_SVG = b64encode(SIDEBAR_TOGGLE_SVG_BASE.encode()).decode()
+GITHUB_SVG = b64encode(GITHUB_SVG_BASE.encode()).decode()
+MAIL_SVG = b64encode(MAIL_SVG_BASE.encode()).decode()
+SEND_SVG = b64encode(SEND_SVG_BASE.encode()).decode()
+DOWN_ARROW_SVG = b64encode(DOWN_ARROW_SVG_BASE.encode()).decode() # This is the "heavy down arrow"
+UPLOAD_SVG = b64encode(UPLOAD_SVG_BASE.encode()).decode()
 
 MODERN_STYLESHEET = f"""
     QWidget {{
@@ -189,28 +186,57 @@ MODERN_STYLESHEET = f"""
         background-color: {THEME_BORDER};
         color: #6c7a89;
     }}
-    QLineEdit, QTextEdit, QListWidget, QTableWidget, QComboBox {{
+    QLineEdit, QTextEdit, QListWidget, QTableWidget {{
         background-color: {THEME_SECONDARY_BG};
         border: 1px solid {THEME_BORDER};
         border-radius: 8px;
         padding: 8px;
         color: {THEME_FOREGROUND};
     }}
-    QLineEdit:focus, QTextEdit:focus, QListWidget:focus, QTableWidget:focus, QComboBox:focus {{
+    QLineEdit:focus, QTextEdit:focus, QListWidget:focus, QTableWidget:focus {{
+        border: 1px solid {THEME_ACCENT};
+    }}
+    QComboBox {{
+        background-color: {THEME_SECONDARY_BG};
+        border: 1px solid {THEME_BORDER};
+        border-radius: 8px;
+        padding: 8px;
+        color: {THEME_FOREGROUND};
+        padding-right: 30px;
+    }}
+    QComboBox:focus {{
         border: 1px solid {THEME_ACCENT};
     }}
     QComboBox::drop-down {{
         subcontrol-origin: padding;
         subcontrol-position: top right;
-        width: 30px;
+        width: 25px;
         border-left-width: 1px;
         border-left-color: {THEME_BORDER};
         border-left-style: solid;
         border-top-right-radius: 7px;
         border-bottom-right-radius: 7px;
+        background-color: {THEME_SECONDARY_BG};
+        border: none;
     }}
     QComboBox::down-arrow {{
-        image: url(data:image/svg+xml;base64,{DOWN_ARROW_SVG});
+        image: none;
+        background: transparent;
+        width: 0px;
+        height: 0px;
+    }}
+    QToolButton#ComboBoxArrowButton {{
+        background-color: {THEME_SECONDARY_BG};
+        border: 1px solid {THEME_BORDER};
+        border-left: none;
+        border-top-right-radius: 7px;
+        border-bottom-right-radius: 7px;
+        width: 25px;
+        height: 100%;
+        padding: 0;
+    }}
+    QToolButton#ComboBoxArrowButton:hover {{
+        background-color: {THEME_BORDER};
     }}
     QCheckBox::indicator {{
         border: 1px solid {THEME_ACCENT};
@@ -322,9 +348,48 @@ MODERN_STYLESHEET = f"""
     }}
 """
 
-# --- NEW: Mock LLM API and Document Processor ---
-# Removed LLMService and DocumentProcessor classes
+# --- Custom QComboBox with ToolButton for Arrow ---
+class CustomComboBox(QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setEditable(False)
+        self.init_arrow_button()
 
+    def init_arrow_button(self):
+        self.arrow_button = QToolButton(self)
+        self.arrow_button.setObjectName("ComboBoxArrowButton")
+        pixmap = QPixmap()
+        pixmap.loadFromData(b64decode(DOWN_ARROW_SVG.encode()))
+        self.arrow_button.setIcon(QIcon(pixmap))
+        self.arrow_button.setIconSize(pixmap.size())
+        self.arrow_button.setCursor(Qt.CursorShape.ArrowCursor)
+
+        self.arrow_button.clicked.connect(self.showPopup)
+
+        self.arrow_button.installEventFilter(self)
+        self.update_arrow_button_geometry()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_arrow_button_geometry()
+
+    def showPopup(self):
+        super().showPopup()
+
+    def update_arrow_button_geometry(self):
+        button_width = 25
+        self.arrow_button.setGeometry(
+            self.width() - button_width, 0,
+            button_width, self.height()
+        )
+
+    def eventFilter(self, obj, event):
+        if obj == self.arrow_button and event.type() == event.Type.MouseButtonPress:
+            self.showPopup()
+            return True
+        return super().eventFilter(obj, event)
+
+# --- DragDropLineEdit ---
 class DragDropLineEdit(QLineEdit):
     fileDropped = pyqtSignal(str)
     folderDropped = pyqtSignal(str)
@@ -484,6 +549,22 @@ class LocalizationManager:
             "key_file_path": "Key File Path:",
             "select_key_file": "Select Key File",
             "open_github": "Open GitHub",
+            "success": "Success",
+            "error": "Error",
+            "no_key": "No Key",
+            "confirm_exit_title": "Confirm Exit",
+            "confirm_exit_message": "Are you sure you want to exit?",
+            "key_error_title": "Key Error",
+            "delete_failed_title": "Delete Failed",
+            "no_symmetric_plugins_found": "No symmetric encryption plugins found. Please add plugins to the 'plugins' folder.",
+            "select_algorithm_warning": "Please select an encryption algorithm.",
+            "confirm_delete_key_title": "Confirm Key Deletion",
+            "delete_failed_message": "Failed to delete key '{name}'.",
+            "export_complete_title": "Export Complete",
+            "export_error_title": "Export Error",
+            "Time": "Time",
+            "Level": "Level",
+            "Message": "Message"
         }
         self.translations["en"] = self._default_english_translations
 
@@ -492,7 +573,7 @@ class LocalizationManager:
 
 loc = LocalizationManager()
 
-# --- NEW: Secure File Shredding Utility ---
+# --- Secure File Shredding Utility ---
 def secure_delete_file(filepath, passes=3):
     """
     Securely deletes a file by overwriting its content multiple times
@@ -545,6 +626,7 @@ class PluginManager:
                 except Exception as e:
                     logger.error(f"Failed to load plugin '{filename}': {e}")
     def get_available_plugins(self):
+        # Correctly initialize settings if not present
         if "enabled_plugins" not in self.settings:
             self.settings["enabled_plugins"] = {name: True for name in self.encryption_plugins}
         enabled_plugins = self.settings.get("enabled_plugins", {})
@@ -595,52 +677,274 @@ class KeyManager:
     def get_key_by_name(self, name):
         return next((key for key in self.keys if key['name'] == name), None)
 
-# --- UPDATED: Worker for Threading ---
-class Worker(QObject):
-    finished = pyqtSignal(object)
-    error = pyqtSignal(str)
+# --- NEW: Crypto Engine for core logic ---
+class CryptoEngine(QObject):
+    # Signals for communication with the main thread
     progress = pyqtSignal(int)
     file_progress = pyqtSignal(int, int, str)
     current_file_status = pyqtSignal(str)
+    operation_finished = pyqtSignal(object)
+    operation_error = pyqtSignal(str)
     
-    def __init__(self, fn, **kwargs):
+    def __init__(self, is_encrypt_mode, kwargs):
         super().__init__()
-        self.fn = fn
+        self.is_encrypt_mode = is_encrypt_mode
         self.kwargs = kwargs
         self.is_cancelled = False
-    
+
     def run(self):
         try:
-            result = self.fn(worker=self, **self.kwargs)
+            if self.is_encrypt_mode:
+                result = self._perform_batch_encryption()
+            else:
+                result = self._perform_batch_decryption()
             if not self.is_cancelled:
-                self.finished.emit(result)
+                self.operation_finished.emit(result)
         except Exception as e:
             logger.error(f"Worker thread error: {e}", exc_info=True)
             if not self.is_cancelled:
-                self.error.emit(str(e))
-                
+                self.operation_error.emit(str(e))
+        finally:
+            self.thread().quit()
+
     def cancel(self):
         self.is_cancelled = True
         logger.info("Worker thread cancellation requested.")
+    
+    def _derive_key(self, password, salt):
+        # CRITICAL FIX: The salt is now a required parameter and is used.
+        # This makes the key derivation secure and consistent.
+        if not salt:
+            raise ValueError("Salt is required for key derivation.")
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=480000,
+            backend=default_backend()
+        )
+        return kdf.derive(password.encode())
 
-# --- Base Tab Widget ---
-class BaseTab(QWidget):
-    def __init__(self, plugin_manager, app_settings, main_window):
-        super().__init__()
-        self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
-        self.layout = QGridLayout(self)
-        self.setLayout(self.layout)
-    def log(self, message, level="info"):
-        self.main_window.log_signal.emit(message, level)
-    def retranslate_ui(self):
-        pass
-    def update_expert_mode_ui(self):
-        pass
-    def update_plugin_options(self):
-        pass
+    def _load_key_from_file(self, key_file_path):
+        try:
+            with open(key_file_path, 'rb') as f:
+                key_data = f.read()
+            if key_file_path.lower().endswith('.key'):
+                return b64decode(key_data)
+            else:
+                raise ValueError("Unsupported key file extension. Use .key")
+        except Exception as e:
+            logger.error(f"Error loading key from file {key_file_path}: {e}")
+            raise ValueError(loc.get_string("key_load_error", e=str(e)))
+    
+    def _get_files_in_path(self, path):
+        if os.path.isfile(path):
+            return [path]
+        elif os.path.isdir(path):
+            file_list = []
+            for root, _, files in os.walk(path):
+                for file in files:
+                    file_list.append(os.path.join(root, file))
+            return file_list
+        return []
+
+    def _perform_batch_encryption(self):
+        input_path = self.kwargs["input_path"]
+        output_base_path = self.kwargs["output_path"]
+        key_source = self.kwargs["key_source"]
+        password_or_key_file = self.kwargs["password_or_key_file"]
+        algo_name = self.kwargs["algo_name"]
+        compression_algo = self.kwargs["compression_algo"]
+        compression_level = self.kwargs["compression_level"]
+        perform_checksum = self.kwargs["perform_checksum"]
+        delete_original = self.kwargs["delete_original"]
+        secure_shredding_passes = self.kwargs["secure_shredding_passes"]
+        files_to_process = self._get_files_in_path(input_path)
+        total_files = len(files_to_process)
+        processed_count = 0
+        successful_count = 0
+        if total_files == 0:
+            return loc.get_string("encryption_complete", count=0)
+        encryption_key_material = None
+        if key_source == "file":
+            try:
+                encryption_key_material = self._load_key_from_file(password_or_key_file)
+            except ValueError as e:
+                raise Exception(loc.get_string("key_load_error", e=str(e)))
+        for i, file_path in enumerate(files_to_process):
+            if self.is_cancelled:
+                return loc.get_string("operation_cancelled")
+            self.file_progress.emit(i + 1, total_files, file_path)
+            self.current_file_status.emit(loc.get_string("file_processing_status", filename=os.path.basename(file_path)))
+            try:
+                relative_path_part = os.path.relpath(file_path, input_path)
+                relative_dir = os.path.dirname(relative_path_part)
+                output_dir = os.path.join(output_base_path, relative_dir)
+                os.makedirs(output_dir, exist_ok=True)
+                final_output_path = os.path.join(output_dir, os.path.basename(file_path) + ".enc")
+                
+                with open(file_path, 'rb') as f:
+                    plaintext = f.read()
+                original_checksum = None
+                if perform_checksum:
+                    original_checksum = hashlib.sha256(plaintext).hexdigest()
+                    logger.info(f"Generated checksum for {os.path.basename(file_path)}: {original_checksum}")
+                compressed_data = plaintext
+                if compression_algo != loc.get_string("no_compression"):
+                    temp_compressed_path = file_path + ".comp_temp"
+                    if compress_file(file_path, temp_compressed_path, compression_algo, compression_level):
+                        with open(temp_compressed_path, 'rb') as f_comp:
+                            compressed_data = f_comp.read()
+                        os.remove(temp_compressed_path)
+                    else:
+                        raise Exception("Compression failed.")
+
+                salt = secrets.token_bytes(16)
+                iv = secrets.token_bytes(12)
+                
+                if key_source == "password":
+                    key = self._derive_key(password_or_key_file, salt)
+                else: # key_source == "file"
+                    key = encryption_key_material
+
+                encryptor = Cipher(algorithms.AES(key), modes.GCM(iv), backend=default_backend()).encryptor()
+                encrypted_data = encryptor.update(compressed_data) + encryptor.finalize()
+                tag = encryptor.tag
+
+                with open(final_output_path, 'wb') as f:
+                    f.write(encrypted_data)
+                
+                meta = {
+                    'algorithm': algo_name,
+                    'salt': b64encode(salt).decode() if key_source == 'password' else None,
+                    'iv': b64encode(iv).decode(),
+                    'tag': b64encode(tag).decode(),
+                    'compression': compression_algo if compression_algo != loc.get_string("no_compression") else None,
+                    'original_checksum': original_checksum,
+                    'key_source': key_source,
+                    'key_path': password_or_key_file if key_source == 'file' else None
+                }
+                with open(final_output_path + '.meta', 'w') as f:
+                    json.dump(meta, f, indent=4)
+                
+                if delete_original:
+                    self.current_file_status.emit(loc.get_string("file_shredding"))
+                    if secure_shredding_passes > 0:
+                        secure_delete_file(file_path, secure_shredding_passes)
+                    else:
+                        os.remove(file_path)
+                    self.current_file_status.emit(loc.get_string("shredding_complete"))
+                successful_count += 1
+                logger.info(f"Successfully encrypted: {os.path.basename(file_path)}")
+            except Exception as e:
+                logger.error(f"Failed to encrypt {os.path.basename(file_path)}: {e}")
+                self.operation_error.emit(f"Failed to encrypt {os.path.basename(file_path)}: {e}")
+            processed_count += 1
+            self.progress.emit(int((processed_count / total_files) * 100))
+        return loc.get_string("encryption_complete", count=successful_count)
+
+    def _perform_batch_decryption(self):
+        input_path = self.kwargs["input_path"]
+        output_base_path = self.kwargs["output_path"]
+        key_source = self.kwargs["key_source"]
+        password_or_key_file = self.kwargs["password_or_key_file"]
+        files_to_process = [f for f in self._get_files_in_path(input_path) if f.endswith('.enc')]
+        total_files = len(files_to_process)
+        processed_count = 0
+        successful_count = 0
+        if total_files == 0:
+            return loc.get_string("decryption_complete", count=0)
+        decryption_key_material = None
+        if key_source == "file":
+            try:
+                decryption_key_material = self._load_key_from_file(password_or_key_file)
+            except ValueError as e:
+                raise Exception(loc.get_string("key_load_error", e=str(e)))
+        for i, file_path in enumerate(files_to_process):
+            if self.is_cancelled:
+                return loc.get_string("operation_cancelled")
+            self.file_progress.emit(i + 1, total_files, file_path)
+            self.current_file_status.emit(loc.get_string("file_processing_status", filename=os.path.basename(file_path)))
+            meta_path = file_path + '.meta'
+            if not os.path.exists(meta_path):
+                logger.warning(f"Metadata file not found for {os.path.basename(file_path)}. Skipping.")
+                self.operation_error.emit(loc.get_string("metadata_not_found"))
+                processed_count += 1
+                continue
+            try:
+                with open(meta_path, 'r') as f:
+                    meta = json.load(f)
+                salt_b64 = meta.get('salt')
+                iv_b64 = meta['iv']
+                tag_b64 = meta['tag']
+                compression_algo_meta = meta.get('compression')
+                original_checksum_meta = meta.get('original_checksum')
+                key_source_meta = meta.get('key_source', 'password')
+                decryption_key = None
+                if key_source_meta == "password":
+                    if not password_or_key_file:
+                        raise ValueError("Password not provided for decryption.")
+                    if not salt_b64:
+                        raise ValueError("Salt not found in metadata. Cannot derive key.")
+                    salt = b64decode(salt_b64)
+                    decryption_key = self._derive_key(password_or_key_file, salt)
+                elif key_source_meta == "file":
+                    if not decryption_key_material:
+                        raise ValueError("Key file not provided or invalid for decryption.")
+                    if isinstance(decryption_key_material, bytes):
+                        decryption_key = decryption_key_material
+                    else:
+                        raise ValueError("Invalid key material type for decryption.")
+                if decryption_key is None:
+                    raise ValueError("Could not determine decryption key.")
+                with open(file_path, 'rb') as f:
+                    ciphertext = f.read()
+                try:
+                    iv = b64decode(iv_b64)
+                    tag = b64decode(tag_b64)
+                    decryptor = Cipher(algorithms.AES(decryption_key), modes.GCM(iv, tag), backend=default_backend()).decryptor()
+                    decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
+                except InvalidTag:
+                    raise ValueError(loc.get_string("invalid_password_or_corrupt"))
+                decompressed_data = decrypted_data
+                if compression_algo_meta:
+                    temp_decompressed_path = file_path.replace(".enc", "") + ".decomp_temp"
+                    with open(temp_decompressed_path, 'wb') as f_temp:
+                        f_temp.write(decrypted_data)
+                    if decompress_file(temp_decompressed_path, temp_decompressed_path + ".final", compression_algo_meta):
+                        with open(temp_decompressed_path + ".final", 'rb') as f_decomp:
+                            decompressed_data = f_decomp.read()
+                        os.remove(temp_decompressed_path)
+                        os.remove(temp_decompressed_path + ".final")
+                    else:
+                        os.remove(temp_decompressed_path)
+                        raise Exception("Decompression failed.")
+                relative_path_part = os.path.relpath(file_path, input_path)
+                relative_dir = os.path.dirname(relative_path_part)
+                output_dir = os.path.join(output_base_path, relative_dir)
+                os.makedirs(output_dir, exist_ok=True)
+                final_output_path = os.path.join(output_dir, os.path.basename(file_path).replace(".enc", ""))
+                with open(final_output_path, 'wb') as f:
+                    f.write(decompressed_data)
+                if original_checksum_meta:
+                    current_checksum = hashlib.sha256(decompressed_data).hexdigest()
+                    if current_checksum == original_checksum_meta:
+                        logger.info(loc.get_string("checksum_verified", filename=os.path.basename(file_path)))
+                    else:
+                        logger.warning(loc.get_string("checksum_mismatch", filename=os.path.basename(file_path)))
+                        self.current_file_status.emit(loc.get_string("checksum_mismatch", filename=os.path.basename(file_path)))
+                successful_count += 1
+                logger.info(f"Successfully decrypted: {os.path.basename(file_path)}")
+            except Exception as e:
+                logger.error(f"Failed to decrypt {os.path.basename(file_path)}: {e}")
+                self.operation_error.emit(f"Failed to decrypt {os.path.basename(file_path)}: {e}")
+            processed_count += 1
+            self.progress.emit(int((processed_count / total_files) * 100))
+        return loc.get_string("decryption_complete", count=successful_count)
+
 
 # --- Compression Utilities ---
-def compress_file(input_filepath, output_filepath, algorithm="gzip", level=-1):
+def compress_file(input_filepath, output_filepath, algorithm="Gzip", level=-1):
     """Compresses a file using the specified algorithm."""
     try:
         if algorithm == "Gzip":
@@ -662,7 +966,7 @@ def compress_file(input_filepath, output_filepath, algorithm="gzip", level=-1):
     except Exception as e:
         logger.error(f"Error compressing file {input_filepath}: {e}")
         return False
-def decompress_file(input_filepath, output_filepath, algorithm="gzip"):
+def decompress_file(input_filepath, output_filepath, algorithm="Gzip"):
     """Decompresses a file using the specified algorithm."""
     try:
         if algorithm == "Gzip":
@@ -685,21 +989,36 @@ def decompress_file(input_filepath, output_filepath, algorithm="gzip"):
         logger.error(f"Error decompressing file {input_filepath}: {e}")
         return False
 
-# --- Encrypt/Decrypt Tabs (Restored and Enhanced) ---
-class CryptoTab(BaseTab):
+# --- Encrypt/Decrypt Tabs ---
+class CryptoTab(QWidget): # Inherit from QWidget, not BaseTab
     def __init__(self, plugin_manager, app_settings, main_window, is_encrypt_mode):
-        super().__init__(plugin_manager, app_settings, main_window)
+        super().__init__()
+        self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
         self.is_encrypt_mode = is_encrypt_mode
+        self.worker = None
+        self.thread = None
+        self.layout = QGridLayout(self)
+        self.setLayout(self.layout)
         self.setup_ui()
         self.connect_signals()
         self.update_plugin_options()
         self.update_expert_mode_ui()
+
+    def log(self, message, level="info"):
+        self.main_window.log_signal.emit(message, level)
+    def retranslate_ui(self):
+        pass
+    def update_expert_mode_ui(self):
+        pass
+    def update_plugin_options(self):
+        pass
+        
     def setup_ui(self):
         self.input_path_entry = DragDropLineEdit()
         self.output_path_entry = DragDropLineEdit()
         self.browse_input_button = QPushButton(loc.get_string("select_file_folder"))
         self.browse_output_button = QPushButton(loc.get_string("browse"))
-        self.algo_dropdown = QComboBox()
+        self.algo_dropdown = CustomComboBox()
         self.key_input_type_label = QLabel(loc.get_string("password_input_type"))
         self.password_radio_button = QRadioButton(loc.get_string("use_password"))
         self.key_file_radio_button = QRadioButton(loc.get_string("use_key_file"))
@@ -724,7 +1043,7 @@ class CryptoTab(BaseTab):
         self.file_status_label = QLabel(loc.get_string("waiting_for_op"))
         self.file_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.compression_algo_label = QLabel(loc.get_string("compression_algorithm"))
-        self.compression_algo_dropdown = QComboBox()
+        self.compression_algo_dropdown = CustomComboBox()
         self.compression_algo_dropdown.addItems([loc.get_string("no_compression"), loc.get_string("gzip"), loc.get_string("bzip2"), loc.get_string("lzma")])
         self.compression_level_label = QLabel(loc.get_string("compression_level"))
         self.compression_level_entry = QLineEdit("-1")
@@ -824,26 +1143,20 @@ class CryptoTab(BaseTab):
         file_dialog = QFileDialog(self)
         file_dialog.setWindowTitle(loc.get_string("select_file_folder"))
         file_dialog.setDirectory(last_dir)
-        file_dialog.setFileMode(QFileDialog.FileMode.AnyFile)
-        file_dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        file_dialog.setOption(QFileDialog.Option.ShowDirsOnly, False)
-        
-        # Get the platform-specific dialog handle
-        tree_view = file_dialog.findChild(QTableWidget) or file_dialog.findChild(QListWidget)
-        if tree_view:
-            tree_view.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-
-        # Allow selecting both files and directories
-        file_dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-
+        file_dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        if sys.platform == "darwin" or sys.platform == "linux":
+            file_dialog.setOption(QFileDialog.Option.ShowDirsOnly, False)
+            file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles | QFileDialog.FileMode.DirectoryOnly)
+        else:
+             file_dialog.setOption(QFileDialog.Option.ShowDirsOnly, False)
         if file_dialog.exec():
             selected_path = file_dialog.selectedFiles()[0]
             if os.path.isdir(selected_path):
                 self.on_folder_dropped(selected_path)
             else:
                 self.on_file_dropped(selected_path)
-            self.app_settings["last_input_dir"] = os.path.dirname(selected_path)
+            self.app_settings["last_input_dir"] = os.path.dirname(selected_path) if os.path.isfile(selected_path) else selected_path
             self.main_window.save_settings()
     def browse_output(self):
         if path := QFileDialog.getExistingDirectory(self, loc.get_string("select_output_folder")):
@@ -886,24 +1199,23 @@ class CryptoTab(BaseTab):
             QMessageBox.warning(self, loc.get_string("input_error"), loc.get_string("all_fields_filled"))
             return
         if key_source == "password" and not password_or_key_file:
-            QMessageBox.warning(self, loc.get_string("input_error"), loc.get_string("password") + " field cannot be empty.")
+            QMessageBox.warning(self, loc.get_string("input_error"), loc.get_string("password") + " " + loc.get_string("all_fields_filled").lower())
             return
         if key_source == "file" and not password_or_key_file:
-            QMessageBox.warning(self, loc.get_string("input_error"), loc.get_string("key_file_path") + " field cannot be empty.")
+            QMessageBox.warning(self, loc.get_string("input_error"), loc.get_string("key_file_path") + " " + loc.get_string("all_fields_filled").lower())
             return
         if key_source == "file" and not os.path.exists(password_or_key_file):
-            QMessageBox.warning(self, loc.get_string("input_error"), "Key file not found: " + password_or_key_file)
+            QMessageBox.warning(self, loc.get_string("input_error"), loc.get_string("key_file_path") + ": " + password_or_key_file + " " + loc.get_string("metadata_not_found").lower())
             return
         self.action_button.setEnabled(False)
         self.progress_bar.setValue(0)
         self.file_status_label.setText(loc.get_string("waiting_for_op"))
-        op_func = self._perform_batch_encryption if self.is_encrypt_mode else self._perform_batch_decryption
         self.thread = QThread()
-        self.worker = Worker(op_func, **params)
+        self.worker = CryptoEngine(self.is_encrypt_mode, params)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.on_operation_complete)
-        self.worker.error.connect(self.on_operation_error)
+        self.worker.operation_finished.connect(self.on_operation_complete)
+        self.worker.operation_error.connect(self.on_operation_error)
         self.worker.progress.connect(self.progress_bar.setValue)
         self.worker.file_progress.connect(self.update_file_progress_label)
         self.worker.current_file_status.connect(self.file_status_label.setText)
@@ -920,243 +1232,14 @@ class CryptoTab(BaseTab):
         self.progress_bar.setValue(100)
         self.file_status_label.setText(loc.get_string("waiting_for_op"))
         self.main_window.show_status_message(str(result_message), 5000)
-        QMessageBox.information(self, "Success", str(result_message))
-        self.thread.quit()
+        QMessageBox.information(self, loc.get_string("success"), str(result_message))
         self.thread.wait()
     def on_operation_error(self, error_message):
         self.action_button.setEnabled(True)
         self.file_status_label.setText(loc.get_string("waiting_for_op"))
         self.main_window.show_status_message(f"Error: {error_message}", 8000)
-        QMessageBox.critical(self, "Error", error_message)
-        self.thread.quit()
+        QMessageBox.critical(self, loc.get_string("error"), error_message)
         self.thread.wait()
-    def _derive_key(self, password, salt):
-        return PBKDF2HMAC(hashes.SHA256(), 32, salt, 480000, backend=default_backend()).derive(password.encode())
-    def _load_key_from_file(self, key_file_path):
-        """Loads key material from a file (Base64 for symmetric)."""
-        try:
-            with open(key_file_path, 'rb') as f:
-                key_data = f.read()
-            if key_file_path.lower().endswith('.key'):
-                return b64decode(key_data)
-            else:
-                raise ValueError("Unsupported key file extension. Use .key")
-        except Exception as e:
-            logger.error(f"Error loading key from file {key_file_path}: {e}")
-            raise ValueError(f"Failed to load key from file: {e}")
-    def _get_files_in_path(self, path):
-        """Recursively gets all file paths within a given path."""
-        if os.path.isfile(path):
-            return [path]
-        elif os.path.isdir(path):
-            file_list = []
-            for root, _, files in os.walk(path):
-                for file in files:
-                    file_list.append(os.path.join(root, file))
-            return file_list
-        return []
-    def _perform_batch_encryption(self, worker, **kwargs):
-        input_path = kwargs["input_path"]
-        output_base_path = kwargs["output_path"]
-        key_source = kwargs["key_source"]
-        password_or_key_file = kwargs["password_or_key_file"]
-        algo_name = kwargs["algo_name"]
-        compression_algo = kwargs["compression_algo"]
-        compression_level = kwargs["compression_level"]
-        perform_checksum = kwargs["perform_checksum"]
-        delete_original = kwargs["delete_original"]
-        secure_shredding_passes = kwargs["secure_shredding_passes"]
-        files_to_process = self._get_files_in_path(input_path)
-        total_files = len(files_to_process)
-        processed_count = 0
-        successful_count = 0
-        if total_files == 0:
-            return loc.get_string("encryption_complete", count=0)
-        encryption_key_material = None
-        if key_source == "file":
-            try:
-                encryption_key_material = self._load_key_from_file(password_or_key_file)
-            except ValueError as e:
-                raise Exception(f"Key file loading error: {e}")
-        for i, file_path in enumerate(files_to_process):
-            if worker.is_cancelled:
-                return loc.get_string("operation_cancelled")
-            worker.file_progress.emit(i + 1, total_files, file_path)
-            worker.current_file_status.emit(loc.get_string("file_processing_status", filename=os.path.basename(file_path)))
-            try:
-                relative_path_part = os.path.relpath(file_path, input_path)
-                relative_dir = os.path.dirname(relative_path_part)
-                output_dir = os.path.join(output_base_path, relative_dir)
-                os.makedirs(output_dir, exist_ok=True)
-                final_output_path = os.path.join(output_dir, os.path.basename(file_path) + ".enc")
-                with open(file_path, 'rb') as f:
-                    plaintext = f.read()
-                original_checksum = None
-                if perform_checksum:
-                    original_checksum = hashlib.sha256(plaintext).hexdigest()
-                    logger.info(f"Generated checksum for {os.path.basename(file_path)}: {original_checksum}")
-                compressed_data = plaintext
-                if compression_algo != loc.get_string("no_compression"):
-                    temp_compressed_path = file_path + ".comp_temp"
-                    if compress_file(file_path, temp_compressed_path, compression_algo, compression_level):
-                        with open(temp_compressed_path, 'rb') as f_comp:
-                            compressed_data = f_comp.read()
-                        os.remove(temp_compressed_path)
-                    else:
-                        raise Exception("Compression failed.")
-                salt_b64 = None
-                iv_b64 = None
-                tag_b64 = None
-                encrypted_data = None
-                key_type_meta = "symmetric"
-                key_path_meta = None
-                if key_source == "password":
-                    salt = os.urandom(16)
-                    key = self._derive_key(password_or_key_file, salt)
-                    iv = os.urandom(12)
-                    encryptor = Cipher(algorithms.AES(key), modes.GCM(iv), backend=default_backend()).encryptor()
-                    encrypted_data = encryptor.update(compressed_data) + encryptor.finalize()
-                    salt_b64 = b64encode(salt).decode()
-                    iv_b64 = b64encode(iv).decode()
-                    tag_b64 = b64encode(encryptor.tag).decode()
-                else:
-                    key_path_meta = password_or_key_file
-                    if isinstance(encryption_key_material, bytes):
-                        iv = os.urandom(12)
-                        encryptor = Cipher(algorithms.AES(encryption_key_material), modes.GCM(iv), backend=default_backend()).encryptor()
-                        encrypted_data = encryptor.update(compressed_data) + encryptor.finalize()
-                        iv_b64 = b64encode(iv).decode()
-                        tag_b64 = b64encode(encryptor.tag).decode()
-                        salt_b64 = None
-                    else:
-                        raise ValueError("Invalid key material from file.")
-                with open(final_output_path, 'wb') as f:
-                    f.write(encrypted_data)
-                meta = {
-                    'algorithm': algo_name,
-                    'salt': salt_b64,
-                    'iv': iv_b64,
-                    'tag': tag_b64,
-                    'compression': compression_algo if compression_algo != loc.get_string("no_compression") else None,
-                    'original_checksum': original_checksum,
-                    'key_source': key_source,
-                    'key_path': key_path_meta
-                }
-                with open(final_output_path + '.meta', 'w') as f:
-                    json.dump(meta, f, indent=4)
-                if delete_original:
-                    worker.current_file_status.emit(loc.get_string("file_shredding"))
-                    if secure_shredding_passes > 0:
-                        secure_delete_file(file_path, secure_shredding_passes)
-                    else:
-                        os.remove(file_path)
-                    worker.current_file_status.emit(loc.get_string("shredding_complete"))
-                successful_count += 1
-                logger.info(f"Successfully encrypted: {os.path.basename(file_path)}")
-            except Exception as e:
-                logger.error(f"Failed to encrypt {os.path.basename(file_path)}: {e}")
-                worker.error.emit(f"Failed to encrypt {os.path.basename(file_path)}: {e}")
-            processed_count += 1
-            worker.progress.emit(int((processed_count / total_files) * 100))
-        return loc.get_string("encryption_complete", count=successful_count)
-    def _perform_batch_decryption(self, worker, **kwargs):
-        input_path = kwargs["input_path"]
-        output_base_path = kwargs["output_path"]
-        key_source = kwargs["key_source"]
-        password_or_key_file = kwargs["password_or_key_file"]
-        algo_name = kwargs["algo_name"]
-        perform_checksum = kwargs["perform_checksum"]
-        files_to_process = [f for f in self._get_files_in_path(input_path) if f.endswith('.enc')]
-        total_files = len(files_to_process)
-        processed_count = 0
-        successful_count = 0
-        if total_files == 0:
-            return loc.get_string("decryption_complete", count=0)
-        decryption_key_material = None
-        if key_source == "file":
-            try:
-                decryption_key_material = self._load_key_from_file(password_or_key_file)
-            except ValueError as e:
-                raise Exception(f"Key file loading error: {e}")
-        for i, file_path in enumerate(files_to_process):
-            if worker.is_cancelled:
-                return loc.get_string("operation_cancelled")
-            worker.file_progress.emit(i + 1, total_files, file_path)
-            worker.current_file_status.emit(loc.get_string("file_processing_status", filename=os.path.basename(file_path)))
-            meta_path = file_path + '.meta'
-            if not os.path.exists(meta_path):
-                logger.warning(f"Metadata file not found for {os.path.basename(file_path)}. Skipping.")
-                worker.error.emit(loc.get_string("metadata_not_found"))
-                processed_count += 1
-                continue
-            try:
-                with open(meta_path, 'r') as f:
-                    meta = json.load(f)
-                salt_b64 = meta.get('salt')
-                iv_b64 = meta['iv']
-                tag_b64 = meta['tag']
-                compression_algo_meta = meta.get('compression')
-                original_checksum_meta = meta.get('original_checksum')
-                key_source_meta = meta.get('key_source', 'password')
-                decryption_key = None
-                if key_source_meta == "password":
-                    if not password_or_key_file:
-                        raise ValueError("Password not provided for decryption.")
-                    salt = b64decode(salt_b64)
-                    decryption_key = self._derive_key(password_or_key_file, salt)
-                elif key_source_meta == "file":
-                    if not decryption_key_material:
-                        raise ValueError("Key file not provided or invalid for decryption.")
-                    if isinstance(decryption_key_material, bytes):
-                        decryption_key = decryption_key_material
-                    else:
-                        raise ValueError("Invalid key material type for decryption.")
-                if decryption_key is None:
-                    raise ValueError("Could not determine decryption key.")
-                with open(file_path, 'rb') as f:
-                    ciphertext = f.read()
-                try:
-                    iv = b64decode(iv_b64)
-                    tag = b64decode(tag_b64)
-                    decryptor = Cipher(algorithms.AES(decryption_key), modes.GCM(iv, tag), backend=default_backend()).decryptor()
-                    decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
-                except InvalidTag:
-                    raise ValueError("Invalid password or corrupted file.")
-                decompressed_data = decrypted_data
-                if compression_algo_meta:
-                    temp_decompressed_path = file_path.replace(".enc", "") + ".decomp_temp"
-                    with open(temp_decompressed_path, 'wb') as f_temp:
-                        f_temp.write(decrypted_data)
-                    if decompress_file(temp_decompressed_path, temp_decompressed_path + ".final", compression_algo_meta):
-                        with open(temp_decompressed_path + ".final", 'rb') as f_decomp:
-                            decompressed_data = f_decomp.read()
-                        os.remove(temp_decompressed_path)
-                        os.remove(temp_decompressed_path + ".final")
-                    else:
-                        os.remove(temp_decompressed_path)
-                        raise Exception("Decompression failed.")
-                relative_path_part = os.path.relpath(file_path, input_path)
-                relative_dir = os.path.dirname(relative_path_part)
-                output_dir = os.path.join(output_base_path, relative_dir)
-                os.makedirs(output_dir, exist_ok=True)
-                final_output_path = os.path.join(output_dir, os.path.basename(file_path).replace(".enc", ""))
-                with open(final_output_path, 'wb') as f:
-                    f.write(decompressed_data)
-                if original_checksum_meta:
-                    current_checksum = hashlib.sha256(decompressed_data).hexdigest()
-                    if current_checksum == original_checksum_meta:
-                        self.log(loc.get_string("checksum_verified", filename=os.path.basename(file_path)), "info")
-                    else:
-                        self.log(loc.get_string("checksum_mismatch", filename=os.path.basename(file_path)), "warning")
-                        worker.current_file_status.emit(loc.get_string("checksum_mismatch", filename=os.path.basename(file_path)))
-                successful_count += 1
-                self.log(f"Successfully decrypted: {os.path.basename(file_path)}", "info")
-            except Exception as e:
-                self.log(f"Failed to decrypt {os.path.basename(file_path)}: {e}", "error")
-                worker.error.emit(f"Failed to decrypt {os.path.basename(file_path)}: {e}")
-            processed_count += 1
-            worker.progress.emit(int((processed_count / total_files) * 100))
-        return loc.get_string("decryption_complete", count=successful_count)
 
 class EncryptTab(CryptoTab):
     def __init__(self, *args, **kwargs):
@@ -1181,17 +1264,23 @@ class DecryptTab(CryptoTab):
         self.algo_dropdown.setToolTip(loc.get_string("tooltip_algorithm"))
         self.password_entry.setToolTip(loc.get_string("tooltip_password"))
 
-class GenerateKeysTab(BaseTab):
-    def __init__(self, key_manager, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class GenerateKeysTab(QWidget): # Inherit from QWidget
+    def __init__(self, key_manager, plugin_manager, app_settings, main_window):
+        super().__init__()
         self.key_manager = key_manager
+        self.plugin_manager = plugin_manager
+        self.app_settings = app_settings
+        self.main_window = main_window
         self.symmetric_key_b64 = None
+        self.layout = QGridLayout(self)
+        self.setLayout(self.layout)
         self.setup_ui()
         self.retranslate_ui()
         self.update_plugin_options()
+
     def setup_ui(self):
         self.algo_label = QLabel(loc.get_string("algorithm_key_generation"))
-        self.algo_dropdown = QComboBox()
+        self.algo_dropdown = CustomComboBox()
         self.layout.addWidget(self.algo_label, 0, 0)
         self.layout.addWidget(self.algo_dropdown, 0, 1, 1, 2)
         self.generate_button = QPushButton(loc.get_string("generate_keys"))
@@ -1213,7 +1302,8 @@ class GenerateKeysTab(BaseTab):
     def retranslate_ui(self):
         self.generate_button.setText(loc.get_string("generate_keys"))
         self.save_symmetric_key_button.setToolTip(loc.get_string("tooltip_save_key"))
-
+        self.copy_key_button.setText(loc.get_string("copy_keys_clipboard"))
+        self.algo_label.setText(loc.get_string("algorithm_key_generation"))
     def update_plugin_options(self):
         current_algo = self.algo_dropdown.currentText()
         self.algo_dropdown.clear()
@@ -1224,31 +1314,35 @@ class GenerateKeysTab(BaseTab):
                 self.algo_dropdown.setCurrentText(current_algo)
             else:
                 self.algo_dropdown.setCurrentIndex(0)
+            self.generate_button.setEnabled(True)
+            self.copy_key_button.setEnabled(True)
+            self.save_symmetric_key_button.setEnabled(True)
         else:
-            self.algo_dropdown.addItem("No Symmetric Plugins Found")
-
+            self.algo_dropdown.addItem(loc.get_string("no_symmetric_plugins_found"))
+            self.generate_button.setEnabled(False)
+            self.copy_key_button.setEnabled(False)
+            self.save_symmetric_key_button.setEnabled(False)
     def generate_keys(self):
         algo_name = self.algo_dropdown.currentText()
-        if not algo_name or algo_name == "No Symmetric Plugins Found":
-            QMessageBox.warning(self, loc.get_string("input_error"), "Please select an algorithm.")
+        if not algo_name or algo_name == loc.get_string("no_symmetric_plugins_found"):
+            QMessageBox.warning(self, loc.get_string("input_error"), loc.get_string("select_algorithm_warning"))
             return
-
         self.symmetric_key_b64 = None
         self.key_output_textbox.clear()
         try:
-            key = os.urandom(32)
+            # Generate a 32-byte key for AES-256
+            key = secrets.token_bytes(32)
             self.symmetric_key_b64 = b64encode(key).decode()
             self.key_output_textbox.setText(f"--- {algo_name} KEY (Base64) ---\n{self.symmetric_key_b64}")
             QMessageBox.information(self, loc.get_string("key_generation"), loc.get_string("key_generation_success", algo_name=algo_name))
         except Exception as e:
             QMessageBox.critical(self, loc.get_string("key_generation_error_title"), str(e))
             logger.error(f"Key generation error: {e}")
-
     def save_key_to_file(self, key_type):
         if key_type == 'symmetric':
             content = self.symmetric_key_b64
             if not content:
-                QMessageBox.warning(self, "No Key", loc.get_string("no_key_to_save"))
+                QMessageBox.warning(self, loc.get_string("no_key"), loc.get_string("no_key_to_save"))
                 return
             path, _ = QFileDialog.getSaveFileName(self, loc.get_string("save_symmetric_key"), "symmetric_key.key", "Key Files (*.key);;Text Files (*.txt);;All Files (*.*)")
             if path:
@@ -1262,22 +1356,25 @@ class GenerateKeysTab(BaseTab):
                     QMessageBox.critical(self, loc.get_string("file_save_error"), str(e))
                     logger.error(f"Error saving symmetric key to file: {e}")
 
-class PluginsTab(BaseTab):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class PluginsTab(QWidget): # Inherit from QWidget
+    def __init__(self, plugin_manager, app_settings, main_window):
+        super().__init__()
+        self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
+        self.layout = QVBoxLayout(self)
+        self.setLayout(self.layout)
         self.setup_ui()
         self.retranslate_ui()
         self.load_plugin_list()
     def setup_ui(self):
         self.plugin_list_widget = QListWidget()
         self.reload_button = QPushButton()
-        self.layout.addWidget(QLabel("Available Encryption Plugins:"), 0, 0)
-        self.layout.addWidget(self.plugin_list_widget, 1, 0)
-        self.layout.addWidget(self.reload_button, 2, 0)
+        self.layout.addWidget(QLabel(loc.get_string("loaded_encryption_plugins")))
+        self.layout.addWidget(self.plugin_list_widget)
+        self.layout.addWidget(self.reload_button)
         self.plugin_list_widget.itemChanged.connect(self.on_plugin_status_changed)
         self.reload_button.clicked.connect(self.reload_plugins)
     def retranslate_ui(self):
-        self.reload_button.setText("Reload Plugins from Disk")
+        self.reload_button.setText(loc.get_string("reload_plugins"))
         self.plugin_list_widget.setToolTip(loc.get_string("plugins_enable_disable"))
     def load_plugin_list(self):
         self.plugin_list_widget.blockSignals(True)
@@ -1301,11 +1398,14 @@ class PluginsTab(BaseTab):
         self.plugin_manager.load_plugins()
         self.load_plugin_list()
         self.main_window.update_all_tabs_plugin_options()
-        self.main_window.show_status_message(loc.get_string("plugins_reloaded"), 3000)
+        self.main_window.show_status_message(loc.get_string("plugins_reloaded_success"), 3000)
 
-class SettingsTab(BaseTab):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class SettingsTab(QWidget): # Inherit from QWidget
+    def __init__(self, plugin_manager, app_settings, main_window):
+        super().__init__()
+        self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
+        self.layout = QGridLayout(self)
+        self.setLayout(self.layout)
         self.setup_ui()
         self.load_settings_to_ui()
     def retranslate_ui(self):
@@ -1321,7 +1421,7 @@ class SettingsTab(BaseTab):
         self.enable_log_rotation_checkbox.setText(loc.get_string("enable_log_rotation"))
     def setup_ui(self):
         self.language_label = QLabel(loc.get_string("language_wip"))
-        self.language_dropdown = QComboBox()
+        self.language_dropdown = CustomComboBox()
         self.language_dropdown.addItem("English")
         self.language_dropdown.setEnabled(False)
         self.layout.addWidget(self.language_label, 0, 0)
@@ -1336,14 +1436,14 @@ class SettingsTab(BaseTab):
         self.layout.addWidget(self.animation_speed_label, 1, 0)
         self.layout.addWidget(self.animation_speed_slider, 1, 1)
         self.default_output_folder_label = QLabel(loc.get_string("default_output_folder"))
-        self.default_output_folder_entry = QLineEdit()
+        self.default_output_folder_entry = DragDropLineEdit()
         self.browse_default_output_button = QPushButton(loc.get_string("browse"))
         self.browse_default_output_button.clicked.connect(self.browse_default_output_folder)
         self.layout.addWidget(self.default_output_folder_label, 2, 0)
         self.layout.addWidget(self.default_output_folder_entry, 2, 1)
         self.layout.addWidget(self.browse_default_output_button, 2, 2)
         self.default_encryption_algo_label = QLabel(loc.get_string("default_encryption_algorithm"))
-        self.default_encryption_algo_dropdown = QComboBox()
+        self.default_encryption_algo_dropdown = CustomComboBox()
         self.default_encryption_algo_dropdown.currentTextChanged.connect(self.save_default_encryption_algo)
         self.layout.addWidget(self.default_encryption_algo_label, 3, 0)
         self.layout.addWidget(self.default_encryption_algo_dropdown, 3, 1, 1, 2)
@@ -1425,9 +1525,12 @@ class SettingsTab(BaseTab):
         self.update_default_encryption_algo_options()
 
 
-class AboutTab(BaseTab):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class AboutTab(QWidget): # Inherit from QWidget
+    def __init__(self, plugin_manager, app_settings, main_window):
+        super().__init__()
+        self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
+        self.layout = QGridLayout(self)
+        self.setLayout(self.layout)
         self.setup_ui()
     def setup_ui(self):
         content_widget = QWidget()
@@ -1468,14 +1571,12 @@ class AboutTab(BaseTab):
             github_button.setIcon(QIcon(github_pixmap))
         else:
             github_button.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(b64decode(GITHUB_SVG.encode())))))
-        github_button.setText("GitHub")
-        github_button.setObjectName("AboutTabContactButton")
+        github_button.setObjectName("open_github_button")
         github_button.clicked.connect(lambda: webbrowser.open(GITHUB_URL))
         contact_layout.addWidget(github_button)
         mail_button = QPushButton()
         mail_button.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(b64decode(MAIL_SVG.encode())))))
-        mail_button.setText("Email")
-        mail_button.setObjectName("AboutTabContactButton")
+        mail_button.setObjectName("contact_developer_button")
         mail_button.clicked.connect(lambda: webbrowser.open(f"mailto:{DEVELOPER_EMAIL}"))
         contact_layout.addWidget(mail_button)
         content_layout.addLayout(contact_layout)
@@ -1484,23 +1585,26 @@ class AboutTab(BaseTab):
         self.layout.addWidget(content_widget, 1, 1)
         self.layout.setRowStretch(2, 1)
         self.layout.setColumnStretch(2, 1)
+        self.retranslate_ui() # Call retranslate to set button text
     def retranslate_ui(self):
         self.app_name_label.setText(loc.get_string("app_name"))
         self.version_label.setText(f'{loc.get_string("version")}{APP_VERSION}')
         self.developer_label.setText(f'{loc.get_string("developed_by")}{DEVELOPER_NAME}')
+        self.findChild(QPushButton, "open_github_button").setText(loc.get_string("open_github"))
+        self.findChild(QPushButton, "contact_developer_button").setText(loc.get_string("contact_developer"))
 
 
 class LogViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.log_entries = []
-        self.setup_ui()
-    def setup_ui(self):
         self.layout = QVBoxLayout(self)
         self.setLayout(self.layout)
+        self.setup_ui()
+    def setup_ui(self):
         control_layout = QHBoxLayout()
         self.filter_label = QLabel(loc.get_string("filter_by_level"))
-        self.filter_dropdown = QComboBox()
+        self.filter_dropdown = CustomComboBox()
         self.filter_dropdown.addItems([loc.get_string("all_levels"), loc.get_string("info"), loc.get_string("warning"), loc.get_string("error")])
         self.filter_dropdown.currentTextChanged.connect(self.apply_filter)
         self.search_entry = QLineEdit()
@@ -1515,7 +1619,7 @@ class LogViewer(QWidget):
         self.layout.addLayout(control_layout)
         self.log_table = QTableWidget()
         self.log_table.setColumnCount(3)
-        self.log_table.setHorizontalHeaderLabels(["Time", "Level", "Message"])
+        self.log_table.setHorizontalHeaderLabels([loc.get_string("Time"), loc.get_string("Level"), loc.get_string("Message")])
         self.log_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.log_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.log_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -1555,17 +1659,19 @@ class LogViewer(QWidget):
                 with open(path, 'w') as f:
                     for entry in self.log_entries:
                         f.write(f"[{entry['timestamp']}] [{entry['level']}] {entry['message']}\n")
-                QMessageBox.information(self, "Export Complete", loc.get_string("log_exported_to", path=path))
+                QMessageBox.information(self, loc.get_string("export_complete_title"), loc.get_string("log_exported_to", path=path))
             except Exception as e:
-                QMessageBox.critical(self, "Export Error", loc.get_string("log_export_error", e=str(e)))
+                QMessageBox.critical(self, loc.get_string("export_error_title"), loc.get_string("log_export_error", e=str(e)))
                 logger.error(f"Error exporting logs: {e}")
     def show_context_menu(self, pos):
         pass
 
-class KeyManagementTab(BaseTab):
-    def __init__(self, key_manager, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.key_manager = key_manager
+class KeyManagementTab(QWidget): # Inherit from QWidget
+    def __init__(self, key_manager, plugin_manager, app_settings, main_window):
+        super().__init__()
+        self.key_manager, self.plugin_manager, self.app_settings, self.main_window = key_manager, plugin_manager, app_settings, main_window
+        self.layout = QGridLayout(self)
+        self.setLayout(self.layout)
         self.setup_ui()
         self.retranslate_ui()
         self.load_keys()
@@ -1585,7 +1691,8 @@ class KeyManagementTab(BaseTab):
         self.layout.addWidget(self.key_table, 1, 0, 1, 1)
         self.layout.setRowStretch(2, 1)
     def retranslate_ui(self):
-        pass
+        self.key_table.setHorizontalHeaderLabels([loc.get_string("key_name"), loc.get_string("key_type"), loc.get_string("key_path"), loc.get_string("key_actions")])
+
     def load_keys(self):
         self.key_table.setRowCount(0)
         for row, key_data in enumerate(self.key_manager.get_keys()):
@@ -1614,7 +1721,7 @@ class KeyManagementTab(BaseTab):
     def view_key(self, key_data):
         key_path = key_data.get("path")
         if not key_path or not os.path.exists(key_path):
-            QMessageBox.warning(self, "Key Error", loc.get_string("key_load_error", e="File not found."))
+            QMessageBox.warning(self, loc.get_string("key_error_title"), loc.get_string("key_load_error", e="File not found."))
             return
         try:
             with open(key_path, 'r') as f:
@@ -1625,12 +1732,12 @@ class KeyManagementTab(BaseTab):
             msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
             msg_box.exec()
         except Exception as e:
-            QMessageBox.critical(self, "Key Error", loc.get_string("key_load_error", e=str(e)))
+            QMessageBox.critical(self, loc.get_string("key_error_title"), loc.get_string("key_load_error", e=str(e)))
             logger.error(f"Error viewing key {key_data.get('name')}: {e}")
     def export_key(self, key_data):
         key_path = key_data.get("path")
         if not key_path or not os.path.exists(key_path):
-            QMessageBox.warning(self, "Key Error", loc.get_string("key_load_error", e="File not found."))
+            QMessageBox.warning(self, loc.get_string("key_error_title"), loc.get_string("key_load_error", e="File not found."))
             return
         if key_data.get("type") == "Symmetric":
             file_filter = "Key Files (*.key);;Text Files (*.txt);;All Files (*.*)"
@@ -1647,9 +1754,10 @@ class KeyManagementTab(BaseTab):
                 QMessageBox.critical(self, loc.get_string("file_save_error"), str(e))
                 logger.error(f"Error exporting key {key_data.get('name')}: {e}")
     def delete_key(self, key_data):
-        reply = QMessageBox.question(self, "Confirm Delete",
+        reply = QMessageBox.question(self, loc.get_string("confirm_delete_key_title"),
                                      loc.get_string("confirm_delete_key", name=key_data.get("name")),
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                     QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             if self.key_manager.delete_key(key_data.get("name")):
                 key_file_path = key_data.get("path")
@@ -1661,7 +1769,7 @@ class KeyManagementTab(BaseTab):
                 self.load_keys()
                 self.main_window.show_status_message(loc.get_string("key_deleted", name=key_data.get("name")), 3000)
             else:
-                QMessageBox.warning(self, "Delete Failed", f"Could not delete key '{key_data.get('name')}'.")
+                QMessageBox.warning(self, loc.get_string("delete_failed_title"), loc.get_string("delete_failed_message", name=key_data.get("name")))
 
 class SFManagerModernUI(QMainWindow):
     log_signal = pyqtSignal(str, str)
@@ -1675,39 +1783,30 @@ class SFManagerModernUI(QMainWindow):
         self.apply_font(self.app_settings.get("font", "Segoe UI"))
         self.statusBar().showMessage(loc.get_string("loading_app"))
         self.show_status_message(loc.get_string("app_started", app_name=APP_NAME, app_version=APP_VERSION))
+        self.configure_logging()
 
     def setup_ui(self):
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(800, 600)
         self.setStyleSheet(MODERN_STYLESHEET)
-
-        # Main container for the whole UI
         main_container = QWidget()
         main_container.setObjectName("MainContainer")
         main_layout = QHBoxLayout(main_container)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         self.setCentralWidget(main_container)
-        
-        # Set window icon
         icon_path = os.path.join(ASSETS_DIR, ICON_FILENAME)
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
         else:
             logger.warning(f"Application icon not found at {icon_path}.")
-
-        # Sidebar widget for navigation
         self.sidebar_widget = QWidget()
         self.sidebar_widget.setObjectName("Sidebar")
         self.sidebar_layout = QVBoxLayout(self.sidebar_widget)
         self.sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.sidebar_layout.setContentsMargins(0, 20, 0, 0)
-
-        # Stacked widget for the main content area
         self.stacked_widget = QStackedWidget()
         self.stacked_widget.setObjectName("MainContentArea")
-
-        # Instantiate all the tabs
         self.encrypt_tab = EncryptTab(self.plugin_manager, self.app_settings, self)
         self.decrypt_tab = DecryptTab(self.plugin_manager, self.app_settings, self)
         self.gen_keys_tab = GenerateKeysTab(self.key_manager, self.plugin_manager, self.app_settings, self)
@@ -1716,8 +1815,6 @@ class SFManagerModernUI(QMainWindow):
         self.settings_tab = SettingsTab(self.plugin_manager, self.app_settings, self)
         self.about_tab = AboutTab(self.plugin_manager, self.app_settings, self)
         self.log_viewer = LogViewer()
-
-        # Add the tabs to the stacked widget
         self.stacked_widget.addWidget(self.encrypt_tab)
         self.stacked_widget.addWidget(self.decrypt_tab)
         self.stacked_widget.addWidget(self.gen_keys_tab)
@@ -1726,8 +1823,6 @@ class SFManagerModernUI(QMainWindow):
         self.stacked_widget.addWidget(self.settings_tab)
         self.stacked_widget.addWidget(self.log_viewer)
         self.stacked_widget.addWidget(self.about_tab)
-
-        # Create navigation buttons for the sidebar
         self.nav_buttons = [
             self.create_nav_button(loc.get_string("encrypt_tab"), 0),
             self.create_nav_button(loc.get_string("decrypt_tab"), 1),
@@ -1738,24 +1833,17 @@ class SFManagerModernUI(QMainWindow):
             self.create_nav_button(loc.get_string("log_viewer"), 6),
             self.create_nav_button(loc.get_string("about_tab"), 7),
         ]
-
         for btn in self.nav_buttons:
             self.sidebar_layout.addWidget(btn)
-        
-        # Add a spacer at the bottom of the sidebar
         self.sidebar_layout.addStretch(1)
-
-        # Add the sidebar and main content area to the main layout
         main_layout.addWidget(self.sidebar_widget)
         main_layout.addWidget(self.stacked_widget, 1)
-
-        # Set initial tab and connect signals
         self.nav_buttons[0].setChecked(True)
         self.log_signal.connect(self.log_viewer.append_log)
 
     def create_nav_button(self, text, index):
         btn = QPushButton(text)
-        btn.setObjectName("NavButton")
+        btn.setObjectName(f"NavButton_{index}")
         btn.setCheckable(True)
         btn.setAutoExclusive(True)
         btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(index))
@@ -1772,7 +1860,6 @@ class SFManagerModernUI(QMainWindow):
             elif i == 5: btn.setText(loc.get_string("settings_tab"))
             elif i == 6: btn.setText(loc.get_string("log_viewer"))
             elif i == 7: btn.setText(loc.get_string("about_tab"))
-            
         self.encrypt_tab.retranslate_ui()
         self.decrypt_tab.retranslate_ui()
         self.gen_keys_tab.retranslate_ui()
@@ -1780,7 +1867,8 @@ class SFManagerModernUI(QMainWindow):
         self.plugins_tab.retranslate_ui()
         self.settings_tab.retranslate_ui()
         self.about_tab.retranslate_ui()
-
+        self.log_viewer.log_table.setHorizontalHeaderLabels([loc.get_string("Time"), loc.get_string("Level"), loc.get_string("Message")])
+        
     def load_settings(self):
         settings = {
             "font": "Segoe UI",
@@ -1791,10 +1879,7 @@ class SFManagerModernUI(QMainWindow):
             "confirm_on_exit": False,
             "max_log_size_mb": 5,
             "enable_log_rotation": True,
-            "gemini_api_key": "",
-            "deepseek_api_key": "",
-            "llm_model": "Gemini",
-            "enabled_plugins": {"AES": True}, # Default to AES
+            "enabled_plugins": {}, # Correctly starts with an empty dict
             "last_input_dir": ""
         }
         if os.path.exists(SETTINGS_FILE):
@@ -1844,8 +1929,8 @@ class SFManagerModernUI(QMainWindow):
 
     def closeEvent(self, event):
         if self.app_settings.get("confirm_on_exit", False):
-            reply = QMessageBox.question(self, 'Confirm Exit',
-                                         'Are you sure you want to exit?',
+            reply = QMessageBox.question(self, loc.get_string("confirm_exit_title"),
+                                         loc.get_string("confirm_exit_message"),
                                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                          QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.Yes:
@@ -1859,45 +1944,18 @@ class SFManagerModernUI(QMainWindow):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=f"{APP_NAME} CLI")
-    subparsers = parser.add_subparsers(dest='action', help='CLI action')
-    p_encrypt = subparsers.add_parser('encrypt', help='Encrypt files/folders')
-    p_encrypt.add_argument('-i', '--input', required=True, help='Input file or folder path')
-    p_encrypt.add_argument('-o', '--output', required=True, help='Output folder path')
-    p_encrypt.add_argument('-a', '--algorithm', required=True, help='Encryption algorithm (e.g., AES)')
-    p_encrypt.add_argument('-c', '--compression', choices=['Gzip', 'Bzip2', 'LZMA', 'No Compression'], default='No Compression', help='Compression algorithm')
-    p_encrypt.add_argument('-l', '--compression-level', type=int, default=-1, help='Compression level (-1 for default, 1-9)')
-    p_encrypt.add_argument('--checksum', action='store_true', help='Generate SHA-256 checksum for integrity check')
-    p_encrypt.add_argument('--delete-original', action='store_true', help='Delete original file after encryption')
-    p_encrypt.add_argument('--shred-passes', type=int, default=0, help='Number of passes for secure file shredding (0 for regular delete)')
-    encrypt_key_group = p_encrypt.add_mutually_exclusive_group(required=True)
-    encrypt_key_group.add_argument('--password', help='Password for encryption')
-    encrypt_key_group.add_argument('--key-file', help='Path to key file for encryption')
-    p_decrypt = subparsers.add_parser('decrypt', help='Decrypt files/folders')
-    p_decrypt.add_argument('-i', '--input', required=True, help='Input encrypted file or folder path')
-    p_decrypt.add_argument('-o', '--output', required=True, help='Output folder path')
-    decrypt_key_group = p_decrypt.add_mutually_exclusive_group(required=True)
-    decrypt_key_group.add_argument('--password', help='Password for decryption')
-    decrypt_key_group.add_argument('--key-file', help='Path to key file for decryption')
-    if len(sys.argv) > 1 and sys.argv[1] in ['encrypt', 'decrypt']:
-        # CryptoCLI(parser.parse_args()).run()
-        # sys.exit(0)
-        pass  # Added to fix "Expected indented block" error
+    # Removed CLI parsing block as CryptoCLI is not defined and causes errors.
+    # The application will now only run in GUI mode.
+    
     app = QApplication(sys.argv)
-    temp_settings = {}
-    if os.path.exists(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                temp_settings = json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to load settings for GUI startup: {e}")
-    initial_font_name = temp_settings.get("font", "Segoe UI")
-    QApplication.setFont(QFont(initial_font_name))
+    
+    # Check for and create assets folder
     os.makedirs(ASSETS_DIR, exist_ok=True)
     if not os.path.exists(os.path.join(ASSETS_DIR, SF_LOGO_FILENAME)):
         logger.warning(f"SF Manager logo not found at {os.path.join(ASSETS_DIR, SF_LOGO_FILENAME)}. Please add it to the assets folder.")
     if not os.path.exists(os.path.join(ASSETS_DIR, GITHUB_LOGO_FILENAME)):
         logger.warning(f"Github logo not found at {os.path.join(ASSETS_DIR, GITHUB_LOGO_FILENAME)}. Please add it to the assets folder.")
+    
     main_win = SFManagerModernUI()
     main_win.show()
     sys.exit(app.exec())
