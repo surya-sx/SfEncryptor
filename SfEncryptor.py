@@ -25,15 +25,18 @@ from PyQt6.QtWidgets import (
     QToolButton, QStackedWidget
 )
 from PyQt6.QtGui import QPixmap, QIcon, QFont, QColor, QImage, QBrush, QGuiApplication, QAction
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QPropertyAnimation, QEasingCurve
 
 # --- Cryptography Imports ---
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.exceptions import InvalidTag
 import secrets
+
 
 # --- Configuration and Global Settings ---
 APP_NAME = "SF FileManager"
@@ -41,8 +44,19 @@ APP_VERSION = "1.2.1.0"
 DEVELOPER_NAME = "Surya B"
 DEVELOPER_EMAIL = "myselfsuryaaz@gmail.com"
 GITHUB_URL = "https://github.com/Suryabx"
-PLUGINS_DIR = "plugins"
-ASSETS_DIR = "assets"
+
+# CRITICAL FIX: Adjust PLUGINS_DIR and ASSETS_DIR for PyInstaller
+# When running as an executable, sys._MEIPASS points to the temporary bundle directory.
+if getattr(sys, 'frozen', False):
+    # Running in a PyInstaller bundle
+    BUNDLE_DIR = sys._MEIPASS
+    PLUGINS_DIR = os.path.join(BUNDLE_DIR, "plugins")
+    ASSETS_DIR = os.path.join(BUNDLE_DIR, "assets")
+else:
+    # Running as a normal Python script
+    PLUGINS_DIR = "plugins"
+    ASSETS_DIR = "assets"
+
 ICON_FILENAME = "Sf_encryptor.png"
 SF_LOGO_FILENAME = "Sf_encryptor.png"
 GITHUB_LOGO_FILENAME = "github_logo.png"
@@ -109,7 +123,7 @@ SEND_SVG_BASE = f"""
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send"><path d="m22 2-7 19-3-6-6-3 19-7z"/><path d="M22 2 11 13"/></svg>
 """
 UPLOAD_SVG_BASE = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-3-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
 """
 # Base64 encode the SVGs once
 MENU_ICON_SVG = b64encode(MENU_ICON_SVG_BASE.encode()).decode()
@@ -202,24 +216,28 @@ MODERN_STYLESHEET = f"""
         border-radius: 8px;
         padding: 8px;
         color: {THEME_FOREGROUND};
-        padding-right: 30px;
+        padding-right: 30px; /* Space for the custom arrow button */
     }}
     QComboBox:focus {{
         border: 1px solid {THEME_ACCENT};
     }}
     QComboBox::drop-down {{
+        /* These styles are for the *area* where the dropdown button would be,
+           but our CustomComboBox uses an overlaying QToolButton.
+           We keep some styles for consistency, but the arrow is handled by QToolButton. */
         subcontrol-origin: padding;
         subcontrol-position: top right;
-        width: 25px;
+        width: 25px; /* Matches QToolButton width */
         border-left-width: 1px;
         border-left-color: {THEME_BORDER};
         border-left-style: solid;
         border-top-right-radius: 7px;
         border-bottom-right-radius: 7px;
         background-color: {THEME_SECONDARY_BG};
-        border: none;
+        border: none; /* Remove default border to let QToolButton handle it */
     }}
     QComboBox::down-arrow {{
+        /* These styles are ignored because CustomComboBox uses a QToolButton */
         image: none;
         background: transparent;
         width: 0px;
@@ -228,11 +246,11 @@ MODERN_STYLESHEET = f"""
     QToolButton#ComboBoxArrowButton {{
         background-color: {THEME_SECONDARY_BG};
         border: 1px solid {THEME_BORDER};
-        border-left: none;
+        border-left: none; /* Blends with the combobox's main border */
         border-top-right-radius: 7px;
         border-bottom-right-radius: 7px;
-        width: 25px;
-        height: 100%;
+        width: 25px; /* Explicit width */
+        height: 100%; /* Fill available height */
         padding: 0;
     }}
     QToolButton#ComboBoxArrowButton:hover {{
@@ -568,6 +586,7 @@ class LocalizationManager:
         }
         self.translations["en"] = self._default_english_translations
 
+    # --- FIX: Re-formatted get_string method to prevent indentation issues ---
     def get_string(self, key, **kwargs):
         return self.translations.get(self.current_language, self.translations["en"]).get(key, key).format(**kwargs)
 
@@ -609,13 +628,16 @@ class PluginManager:
         self.load_plugins()
     def load_plugins(self):
         self.encryption_plugins.clear()
-        if not os.path.exists(PLUGINS_DIR):
-            os.makedirs(PLUGINS_DIR)
+        # CRITICAL FIX: Use the PyInstaller-aware PLUGINS_DIR
+        plugins_path = PLUGINS_DIR
+        if not os.path.exists(plugins_path):
+            os.makedirs(plugins_path)
             return
-        for filename in os.listdir(PLUGINS_DIR):
+        for filename in os.listdir(plugins_path):
             if filename.endswith(".py") and not filename.startswith("__"):
                 try:
-                    spec = importlib.util.spec_from_file_location(filename[:-3], os.path.join(PLUGINS_DIR, filename))
+                    # CRITICAL FIX: Use the correct path for importlib.util.spec_from_file_location
+                    spec = importlib.util.spec_from_file_location(filename[:-3], os.path.join(plugins_path, filename))
                     module = importlib.util.module_from_spec(spec)
                     sys.modules[filename[:-3]] = module
                     spec.loader.exec_module(module)
@@ -626,7 +648,6 @@ class PluginManager:
                 except Exception as e:
                     logger.error(f"Failed to load plugin '{filename}': {e}")
     def get_available_plugins(self):
-        # Correctly initialize settings if not present
         if "enabled_plugins" not in self.settings:
             self.settings["enabled_plugins"] = {name: True for name in self.encryption_plugins}
         enabled_plugins = self.settings.get("enabled_plugins", {})
@@ -655,6 +676,7 @@ class KeyManager:
             with open(KEY_STORE_FILE, 'w') as f:
                 json.dump(self.keys, f, indent=4)
         except Exception as e:
+        
             logger.error(f"Failed to save key store: {e}")
     def add_key(self, name, type, path):
         original_name = name
@@ -712,8 +734,6 @@ class CryptoEngine(QObject):
         logger.info("Worker thread cancellation requested.")
     
     def _derive_key(self, password, salt):
-        # CRITICAL FIX: The salt is now a required parameter and is used.
-        # This makes the key derivation secure and consistent.
         if not salt:
             raise ValueError("Salt is required for key derivation.")
         kdf = PBKDF2HMAC(
@@ -990,7 +1010,7 @@ def decompress_file(input_filepath, output_filepath, algorithm="Gzip"):
         return False
 
 # --- Encrypt/Decrypt Tabs ---
-class CryptoTab(QWidget): # Inherit from QWidget, not BaseTab
+class CryptoTab(QWidget):
     def __init__(self, plugin_manager, app_settings, main_window, is_encrypt_mode):
         super().__init__()
         self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
@@ -1264,7 +1284,7 @@ class DecryptTab(CryptoTab):
         self.algo_dropdown.setToolTip(loc.get_string("tooltip_algorithm"))
         self.password_entry.setToolTip(loc.get_string("tooltip_password"))
 
-class GenerateKeysTab(QWidget): # Inherit from QWidget
+class GenerateKeysTab(QWidget):
     def __init__(self, key_manager, plugin_manager, app_settings, main_window):
         super().__init__()
         self.key_manager = key_manager
@@ -1330,7 +1350,6 @@ class GenerateKeysTab(QWidget): # Inherit from QWidget
         self.symmetric_key_b64 = None
         self.key_output_textbox.clear()
         try:
-            # Generate a 32-byte key for AES-256
             key = secrets.token_bytes(32)
             self.symmetric_key_b64 = b64encode(key).decode()
             self.key_output_textbox.setText(f"--- {algo_name} KEY (Base64) ---\n{self.symmetric_key_b64}")
@@ -1356,7 +1375,7 @@ class GenerateKeysTab(QWidget): # Inherit from QWidget
                     QMessageBox.critical(self, loc.get_string("file_save_error"), str(e))
                     logger.error(f"Error saving symmetric key to file: {e}")
 
-class PluginsTab(QWidget): # Inherit from QWidget
+class PluginsTab(QWidget):
     def __init__(self, plugin_manager, app_settings, main_window):
         super().__init__()
         self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
@@ -1400,7 +1419,7 @@ class PluginsTab(QWidget): # Inherit from QWidget
         self.main_window.update_all_tabs_plugin_options()
         self.main_window.show_status_message(loc.get_string("plugins_reloaded_success"), 3000)
 
-class SettingsTab(QWidget): # Inherit from QWidget
+class SettingsTab(QWidget):
     def __init__(self, plugin_manager, app_settings, main_window):
         super().__init__()
         self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
@@ -1423,7 +1442,7 @@ class SettingsTab(QWidget): # Inherit from QWidget
         self.language_label = QLabel(loc.get_string("language_wip"))
         self.language_dropdown = CustomComboBox()
         self.language_dropdown.addItem("English")
-        self.language_dropdown.setEnabled(False)
+        self.language_dropdown.setEnabled(False) # Language switching is not implemented
         self.layout.addWidget(self.language_label, 0, 0)
         self.layout.addWidget(self.language_dropdown, 0, 1)
         self.animation_speed_label = QLabel(loc.get_string("animation_speed"))
@@ -1525,7 +1544,7 @@ class SettingsTab(QWidget): # Inherit from QWidget
         self.update_default_encryption_algo_options()
 
 
-class AboutTab(QWidget): # Inherit from QWidget
+class AboutTab(QWidget):
     def __init__(self, plugin_manager, app_settings, main_window):
         super().__init__()
         self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
@@ -1537,6 +1556,7 @@ class AboutTab(QWidget): # Inherit from QWidget
         content_layout = QVBoxLayout(content_widget)
         content_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.logo_label = QLabel()
+        # CRITICAL FIX: Load assets using the PyInstaller-aware ASSETS_DIR and correct path
         logo_path = os.path.join(ASSETS_DIR, SF_LOGO_FILENAME)
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path).scaledToHeight(128, Qt.TransformationMode.SmoothTransformation)
@@ -1550,7 +1570,7 @@ class AboutTab(QWidget): # Inherit from QWidget
         font.setBold(True)
         self.app_name_label.setFont(font)
         self.app_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.app_name_label.setObjectName("AboutTabName")
+        self.app_name_label.setObjectName("AboutTabInfo")
         content_layout.addWidget(self.app_name_label)
         self.version_label = QLabel(f'{loc.get_string("version")}{APP_VERSION}')
         self.version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1565,11 +1585,13 @@ class AboutTab(QWidget): # Inherit from QWidget
         contact_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         contact_layout.setSpacing(20)
         github_button = QPushButton()
+        # CRITICAL FIX: Load assets using the PyInstaller-aware ASSETS_DIR and correct path
         github_logo_path = os.path.join(ASSETS_DIR, GITHUB_LOGO_FILENAME)
         if os.path.exists(github_logo_path):
             github_pixmap = QPixmap(github_logo_path).scaledToHeight(32, Qt.TransformationMode.SmoothTransformation)
             github_button.setIcon(QIcon(github_pixmap))
         else:
+            logger.warning(f"Github logo not found at {github_logo_path}. Using embedded SVG.")
             github_button.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(b64decode(GITHUB_SVG.encode())))))
         github_button.setObjectName("open_github_button")
         github_button.clicked.connect(lambda: webbrowser.open(GITHUB_URL))
@@ -1666,7 +1688,7 @@ class LogViewer(QWidget):
     def show_context_menu(self, pos):
         pass
 
-class KeyManagementTab(QWidget): # Inherit from QWidget
+class KeyManagementTab(QWidget):
     def __init__(self, key_manager, plugin_manager, app_settings, main_window):
         super().__init__()
         self.key_manager, self.plugin_manager, self.app_settings, self.main_window = key_manager, plugin_manager, app_settings, main_window
@@ -1795,6 +1817,7 @@ class SFManagerModernUI(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         self.setCentralWidget(main_container)
+        # CRITICAL FIX: Load assets using the PyInstaller-aware ASSETS_DIR and correct path
         icon_path = os.path.join(ASSETS_DIR, ICON_FILENAME)
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
@@ -1879,7 +1902,7 @@ class SFManagerModernUI(QMainWindow):
             "confirm_on_exit": False,
             "max_log_size_mb": 5,
             "enable_log_rotation": True,
-            "enabled_plugins": {}, # Correctly starts with an empty dict
+            "enabled_plugins": {},
             "last_input_dir": ""
         }
         if os.path.exists(SETTINGS_FILE):
@@ -1944,12 +1967,10 @@ class SFManagerModernUI(QMainWindow):
 
 
 def main():
-    # Removed CLI parsing block as CryptoCLI is not defined and causes errors.
-    # The application will now only run in GUI mode.
-    
     app = QApplication(sys.argv)
     
     # Check for and create assets folder
+    # CRITICAL FIX: Use the PyInstaller-aware ASSETS_DIR for initial creation
     os.makedirs(ASSETS_DIR, exist_ok=True)
     if not os.path.exists(os.path.join(ASSETS_DIR, SF_LOGO_FILENAME)):
         logger.warning(f"SF Manager logo not found at {os.path.join(ASSETS_DIR, SF_LOGO_FILENAME)}. Please add it to the assets folder.")
@@ -1962,3 +1983,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
