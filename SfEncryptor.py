@@ -672,7 +672,6 @@ class KeyManager:
             with open(KEY_STORE_FILE, 'w') as f:
                 json.dump(self.keys, f, indent=4)
         except Exception as e:
-        
             logger.error(f"Failed to save key store: {e}")
     def add_key(self, name, type, path):
         original_name = name
@@ -1024,9 +1023,8 @@ class CryptoTab(QWidget):
         self.main_window.log_signal.emit(message, level)
     def retranslate_ui(self):
         pass
+
     def update_expert_mode_ui(self):
-        pass
-    def update_plugin_options(self):
         pass
         
     def setup_ui(self):
@@ -1226,6 +1224,12 @@ class CryptoTab(QWidget):
         self.action_button.setEnabled(False)
         self.progress_bar.setValue(0)
         self.file_status_label.setText(loc.get_string("waiting_for_op"))
+        
+        # Clean up previous thread if it exists
+        if self.thread is not None:
+            self.thread.quit()
+            self.thread.wait()
+            
         self.thread = QThread()
         self.worker = CryptoEngine(self.is_encrypt_mode, params)
         self.worker.moveToThread(self.thread)
@@ -1871,14 +1875,22 @@ class SFManagerModernUI(QMainWindow):
     def retranslate_ui(self):
         self.setWindowTitle(loc.get_string("app_name"))
         for i, btn in enumerate(self.nav_buttons):
-            if i == 0: btn.setText(loc.get_string("encrypt_tab"))
-            elif i == 1: btn.setText(loc.get_string("decrypt_tab"))
-            elif i == 2: btn.setText(loc.get_string("generate_keys_tab"))
-            elif i == 3: btn.setText(loc.get_string("key_management_tab"))
-            elif i == 4: btn.setText(loc.get_string("plugins_tab"))
-            elif i == 5: btn.setText(loc.get_string("settings_tab"))
-            elif i == 6: btn.setText(loc.get_string("log_viewer"))
-            elif i == 7: btn.setText(loc.get_string("about_tab"))
+            if i == 0:
+                btn.setText(loc.get_string("encrypt_tab"))
+            elif i == 1:
+                btn.setText(loc.get_string("decrypt_tab"))
+            elif i == 2:
+                btn.setText(loc.get_string("generate_keys_tab"))
+            elif i == 3:
+                btn.setText(loc.get_string("key_management_tab"))
+            elif i == 4:
+                btn.setText(loc.get_string("plugins_tab"))
+            elif i == 5:
+                btn.setText(loc.get_string("settings_tab"))
+            elif i == 6:
+                btn.setText(loc.get_string("log_viewer"))
+            elif i == 7:
+                btn.setText(loc.get_string("about_tab"))
         self.encrypt_tab.retranslate_ui()
         self.decrypt_tab.retranslate_ui()
         self.gen_keys_tab.retranslate_ui()
