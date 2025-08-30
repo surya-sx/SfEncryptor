@@ -1,10 +1,8 @@
 import sys
 import os
 import json
-import argparse
 import logging
 import importlib.util
-import time
 from base64 import b64encode, b64decode
 import hashlib
 import webbrowser
@@ -19,21 +17,19 @@ from logging.handlers import RotatingFileHandler
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox, QProgressBar,
-    QTextEdit, QFileDialog, QMessageBox, QFrame, QRadioButton,
-    QListWidget, QListWidgetItem, QStatusBar, QHBoxLayout,
+    QTextEdit, QFileDialog, QMessageBox, QRadioButton,
+    QListWidget, QListWidgetItem, QHBoxLayout,
     QHeaderView, QTableWidget, QTableWidgetItem, QMenu, QSlider, QButtonGroup,
     QToolButton, QStackedWidget
 )
 from PyQt6.QtGui import QPixmap, QIcon, QFont, QColor, QImage, QBrush, QGuiApplication, QAction
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
 
 # --- Cryptography Imports ---
-from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.exceptions import InvalidTag
 import secrets
 
@@ -94,8 +90,8 @@ THEME_PRIMARY_BG = "#e0f7fa"  # Lighter, more vibrant sky blue
 THEME_SECONDARY_BG = "#b2ebf2" # Brighter, slightly darker sky blue
 THEME_FOREGROUND = "#004d40"    # Dark teal for high contrast text
 THEME_ACCENT = "#00bcd4"        # Cyan for vibrant accents
-THEME_ACCENT_DARK = "#00838f"   # Darker cyan for hover
-THEME_BORDER = "#80deea"        # Light cyan border
+THEME_ACCENT_DARK = "#00838f"    # Darker cyan for hover
+THEME_BORDER = "#80deea"         # Light cyan border
 THEME_ERROR_RED = "#e74c3c"
 THEME_SUCCESS_GREEN = "#2ecc71"
 THEME_WARNING_ORANGE = "#f39c12"
@@ -131,7 +127,7 @@ SIDEBAR_TOGGLE_SVG = b64encode(SIDEBAR_TOGGLE_SVG_BASE.encode()).decode()
 GITHUB_SVG = b64encode(GITHUB_SVG_BASE.encode()).decode()
 MAIL_SVG = b64encode(MAIL_SVG_BASE.encode()).decode()
 SEND_SVG = b64encode(SEND_SVG_BASE.encode()).decode()
-DOWN_ARROW_SVG = b64encode(DOWN_ARROW_SVG_BASE.encode()).decode() # This is the "heavy down arrow"
+DOWN_ARROW_SVG = b64encode(DOWN_ARROW_SVG_BASE.encode()).decode()  # This is the "heavy down arrow"
 UPLOAD_SVG = b64encode(UPLOAD_SVG_BASE.encode()).decode()
 
 MODERN_STYLESHEET = f"""
@@ -524,12 +520,12 @@ class LocalizationManager:
             "filter_by_level": "Filter by Level:",
             "search_logs": "Search Logs...",
             "export_logs": "Export Logs",
-            "all_levels": "All Levels", "info": "INFO", "warning": "WARNING", "error": "ERROR",
+            "all_levels": "All Levels", "info": "INFO", "warning": "WARNING", "error_level": "ERROR",
             "log_exported_to": "Logs exported to {path}",
             "log_export_error": "Error exporting logs: {e}",
             "key_management_tab": "Key Management",
             "managed_keys": "Managed Keys:",
-            "key_name": "Key Name", "key_type": "Type", "key_path": "Path", "key_actions": "Actions",
+            "key_name": "Key Name", "key_type_header": "Type", "key_path": "Path", "key_actions": "Actions",
             "export_key": "Export Key", "delete_key": "Delete Key", "view_key": "View Key",
             "key_deleted": "Key '{name}' deleted.",
             "key_exported": "Key '{name}' exported to {path}",
@@ -1627,7 +1623,7 @@ class LogViewer(QWidget):
         control_layout = QHBoxLayout()
         self.filter_label = QLabel(loc.get_string("filter_by_level"))
         self.filter_dropdown = CustomComboBox()
-        self.filter_dropdown.addItems([loc.get_string("all_levels"), loc.get_string("info"), loc.get_string("warning"), loc.get_string("error")])
+        self.filter_dropdown.addItems([loc.get_string("all_levels"), loc.get_string("info"), loc.get_string("warning"), loc.get_string("error_level")])
         self.filter_dropdown.currentTextChanged.connect(self.apply_filter)
         self.search_entry = QLineEdit()
         self.search_entry.setPlaceholderText(loc.get_string("search_logs"))
@@ -1700,7 +1696,7 @@ class KeyManagementTab(QWidget):
     def setup_ui(self):
         self.key_table = QTableWidget()
         self.key_table.setColumnCount(4)
-        self.key_table.setHorizontalHeaderLabels([loc.get_string("key_name"), loc.get_string("key_type"), loc.get_string("key_path"), loc.get_string("key_actions")])
+        self.key_table.setHorizontalHeaderLabels([loc.get_string("key_name"), loc.get_string("key_type_header"), loc.get_string("key_path"), loc.get_string("key_actions")])
         self.key_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.key_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.key_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -1713,7 +1709,7 @@ class KeyManagementTab(QWidget):
         self.layout.addWidget(self.key_table, 1, 0, 1, 1)
         self.layout.setRowStretch(2, 1)
     def retranslate_ui(self):
-        self.key_table.setHorizontalHeaderLabels([loc.get_string("key_name"), loc.get_string("key_type"), loc.get_string("key_path"), loc.get_string("key_actions")])
+        self.key_table.setHorizontalHeaderLabels([loc.get_string("key_name"), loc.get_string("key_type_header"), loc.get_string("key_path"), loc.get_string("key_actions")])
 
     def load_keys(self):
         self.key_table.setRowCount(0)
