@@ -76,6 +76,8 @@ LANGUAGES_DIR = os.path.join(APP_SPECIFIC_DIR, "languages")
 KEYS_DIR = os.path.join(APP_SPECIFIC_DIR, "keys")
 
 os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(SETTINGS_DIR, exist_ok=True)
+os.makedirs(LANGUAGES_DIR, exist_ok=True)
 os.makedirs(KEYS_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "sf_manager_suite.log")
 SETTINGS_FILE = os.path.join(SETTINGS_DIR, "settings.json")
@@ -588,7 +590,11 @@ class LocalizationManager:
 
     # --- FIX: Re-formatted get_string method to prevent indentation issues ---
     def get_string(self, key, **kwargs):
-        return self.translations.get(self.current_language, self.translations["en"]).get(key, key).format(**kwargs)
+        try:
+            return self.translations.get(self.current_language, self.translations["en"]).get(key, key).format(**kwargs)
+        except (KeyError, ValueError) as e:
+            logger.warning(f"Error formatting localization string '{key}': {e}")
+            return key  # Return the key itself as fallback
 
 loc = LocalizationManager()
 
@@ -639,6 +645,8 @@ class PluginManager:
                     # CRITICAL FIX: Use the correct path for importlib.util.spec_from_file_location
                     spec = importlib.util.spec_from_file_location(filename[:-3], os.path.join(plugins_path, filename))
                     module = importlib.util.module_from_spec(spec)
+                    # SECURITY WARNING: This executes arbitrary Python code from plugin files
+                    # TODO: Implement plugin validation/sandboxing for production use
                     sys.modules[filename[:-3]] = module
                     spec.loader.exec_module(module)
                     if hasattr(module, 'EncryptorPlugin'):
@@ -750,7 +758,10 @@ class CryptoEngine(QObject):
             with open(key_file_path, 'rb') as f:
                 key_data = f.read()
             if key_file_path.lower().endswith('.key'):
-                return b64decode(key_data)
+                try:
+                    return b64decode(key_data)
+                except Exception as decode_error:
+                    raise ValueError(f"Invalid base64 key file format: {decode_error}")
             else:
                 raise ValueError("Unsupported key file extension. Use .key")
         except Exception as e:
