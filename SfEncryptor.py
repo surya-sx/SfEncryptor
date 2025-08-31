@@ -14,6 +14,8 @@ import gzip
 import bz2
 import lzma
 from logging.handlers import RotatingFileHandler
+import secrets
+import string
 
 # --- PyQt6 Imports ---
 from PyQt6.QtWidgets import (
@@ -22,44 +24,42 @@ from PyQt6.QtWidgets import (
     QTextEdit, QFileDialog, QMessageBox, QFrame, QRadioButton,
     QListWidget, QListWidgetItem, QStatusBar, QHBoxLayout,
     QHeaderView, QTableWidget, QTableWidgetItem, QMenu, QSlider, QButtonGroup,
-    QToolButton, QStackedWidget
+    QToolButton, QStackedWidget, QSpinBox, QSizePolicy
 )
 from PyQt6.QtGui import QPixmap, QIcon, QFont, QColor, QImage, QBrush, QGuiApplication, QAction
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QPropertyAnimation, QSize, QEasingCurve, QCoreApplication
 
 # --- Cryptography Imports ---
-from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.exceptions import InvalidTag
-import secrets
-
 
 # --- Configuration and Global Settings ---
 APP_NAME = "SF FileManager"
-APP_VERSION = "1.2.1.0"
+APP_VERSION = "1.3.0.0"
 DEVELOPER_NAME = "Surya B"
 DEVELOPER_EMAIL = "myselfsuryaaz@gmail.com"
 GITHUB_URL = "https://github.com/Suryabx"
 
-# CRITICAL FIX: Adjust PLUGINS_DIR and ASSETS_DIR for PyInstaller
-# When running as an executable, sys._MEIPASS points to the temporary bundle directory.
+# --- Fix for PyInstaller plugin loading ---
+# This block of code ensures that the application can find the plugins
+# directory whether it's running as a script or a compiled executable.
 if getattr(sys, 'frozen', False):
-    # Running in a PyInstaller bundle
-    BUNDLE_DIR = sys._MEIPASS
-    PLUGINS_DIR = os.path.join(BUNDLE_DIR, "plugins")
-    ASSETS_DIR = os.path.join(BUNDLE_DIR, "assets")
+    # If running as a bundled executable, use the temporary directory
+    # where PyInstaller extracts the files.
+    BASE_DIR = sys._MEIPASS
 else:
-    # Running as a normal Python script
-    PLUGINS_DIR = "plugins"
-    ASSETS_DIR = "assets"
+    # If running as a normal script, use the current directory.
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+PLUGINS_DIR = os.path.join(BASE_DIR, "plugins")
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 
 ICON_FILENAME = "Sf_encryptor.png"
 SF_LOGO_FILENAME = "Sf_encryptor.png"
-GITHUB_LOGO_FILENAME = "github_logo.png"
+GITHUB_LOGO_FILENAME = "github.png"
 
 # --- OS-Specific Directory Setup ---
 if sys.platform == "win32":
@@ -103,36 +103,6 @@ THEME_CARD_BG = "#ffffff"       # White card background with shadow
 THEME_SHADOW_COLOR = "#00000030" # Subtle shadow for depth
 
 BRIGHT_ARROW_COLOR = "#004d40" # Using the dark teal foreground color for contrast
-
-DOWN_ARROW_SVG_BASE = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{BRIGHT_ARROW_COLOR}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down-square"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m8 10 4 4 4-4"/></svg>
-"""
-MENU_ICON_SVG_BASE = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="{THEME_FOREGROUND}" stroke="none" class="lucide lucide-ellipsis-vertical"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-"""
-SIDEBAR_TOGGLE_SVG_BASE = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-"""
-GITHUB_SVG_BASE = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="{THEME_FOREGROUND}" stroke="none" class="lucide lucide-github"><path d="M15 22v-4.129a3.344 3.344 0 0 0-1.077-.923c-3.14-.84-5.467-3.21-5.467-6.027 0-1.332.613-2.58 1.63-3.48a6.002 6.002 0 0 0-.251-3.447s.823-.264 2.704.996a11.168 11.168 0 0 1 5.378 0c1.881-1.26 2.704-.996 2.704-.996a6.002 6.002 0 0 0-.251 3.447c1.017.9 1.63 2.148 1.63 3.48 0 2.817-2.327 5.187-5.467 6.027-.393.105-.758.33-.923.639v4.129H15zM7.25 15.25v-1.5a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75zM15 15.25v-1.5a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75z"/></svg>
-"""
-MAIL_SVG_BASE = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-"""
-SEND_SVG_BASE = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send"><path d="m22 2-7 19-3-6-6-3 19-7z"/><path d="M22 2 11 13"/></svg>
-"""
-UPLOAD_SVG_BASE = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{THEME_FOREGROUND}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-3-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-"""
-# Base64 encode the SVGs once
-MENU_ICON_SVG = b64encode(MENU_ICON_SVG_BASE.encode()).decode()
-SIDEBAR_TOGGLE_SVG = b64encode(SIDEBAR_TOGGLE_SVG_BASE.encode()).decode()
-GITHUB_SVG = b64encode(GITHUB_SVG_BASE.encode()).decode()
-MAIL_SVG = b64encode(MAIL_SVG_BASE.encode()).decode()
-SEND_SVG = b64encode(SEND_SVG_BASE.encode()).decode()
-DOWN_ARROW_SVG = b64encode(DOWN_ARROW_SVG_BASE.encode()).decode() # This is the "heavy down arrow"
-UPLOAD_SVG = b64encode(UPLOAD_SVG_BASE.encode()).decode()
 
 MODERN_STYLESHEET = f"""
     QWidget {{
@@ -216,28 +186,24 @@ MODERN_STYLESHEET = f"""
         border-radius: 8px;
         padding: 8px;
         color: {THEME_FOREGROUND};
-        padding-right: 30px; /* Space for the custom arrow button */
+        padding-right: 30px;
     }}
     QComboBox:focus {{
         border: 1px solid {THEME_ACCENT};
     }}
     QComboBox::drop-down {{
-        /* These styles are for the *area* where the dropdown button would be,
-           but our CustomComboBox uses an overlaying QToolButton.
-           We keep some styles for consistency, but the arrow is handled by QToolButton. */
         subcontrol-origin: padding;
         subcontrol-position: top right;
-        width: 25px; /* Matches QToolButton width */
+        width: 25px;
         border-left-width: 1px;
         border-left-color: {THEME_BORDER};
         border-left-style: solid;
         border-top-right-radius: 7px;
         border-bottom-right-radius: 7px;
         background-color: {THEME_SECONDARY_BG};
-        border: none; /* Remove default border to let QToolButton handle it */
+        border: none;
     }}
     QComboBox::down-arrow {{
-        /* These styles are ignored because CustomComboBox uses a QToolButton */
         image: none;
         background: transparent;
         width: 0px;
@@ -246,11 +212,11 @@ MODERN_STYLESHEET = f"""
     QToolButton#ComboBoxArrowButton {{
         background-color: {THEME_SECONDARY_BG};
         border: 1px solid {THEME_BORDER};
-        border-left: none; /* Blends with the combobox's main border */
+        border-left: none;
         border-top-right-radius: 7px;
         border-bottom-right-radius: 7px;
-        width: 25px; /* Explicit width */
-        height: 100%; /* Fill available height */
+        width: 25px;
+        height: 100%;
         padding: 0;
     }}
     QToolButton#ComboBoxArrowButton:hover {{
@@ -376,8 +342,7 @@ class CustomComboBox(QComboBox):
     def init_arrow_button(self):
         self.arrow_button = QToolButton(self)
         self.arrow_button.setObjectName("ComboBoxArrowButton")
-        pixmap = QPixmap()
-        pixmap.loadFromData(b64decode(DOWN_ARROW_SVG.encode()))
+        pixmap = QPixmap(os.path.join(ASSETS_DIR, "downarrow.png"))
         self.arrow_button.setIcon(QIcon(pixmap))
         self.arrow_button.setIconSize(pixmap.size())
         self.arrow_button.setCursor(Qt.CursorShape.ArrowCursor)
@@ -437,7 +402,7 @@ class LocalizationManager:
             "app_name": "SF FileManager", "encrypt_tab": "Encrypt", "decrypt_tab": "Decrypt",
             "generate_keys_tab": "Generate Keys", "settings_tab": "Settings", "about_tab": "About",
             "plugins_tab": "Plugins", "input_file_folder": "Input File/Folder:",
-            "select_file_folder": "Select File/Folder",
+            "select_file_folder": "Select File/Folder", "select_file": "Select File", "select_folder": "Select Folder",
             "select_file_folder_encrypt": "Select file or folder to encrypt", "output_folder": "Output Folder:",
             "select_output_folder": "Select output folder", "encryption_algorithm": "Encryption Algorithm:",
             "no_plugins_loaded": "No Plugins Loaded", "key_len": "Key Len:", "nonce_iv_len": "Nonce/IV Len:",
@@ -497,7 +462,6 @@ class LocalizationManager:
             "file_processing_status": "Processing: {filename}", "waiting_for_op": "Waiting for operation...",
             "rsa_gen_password_label": "Key Password (optional):",
             "whats_new_tab": "What's New",
-            "whats_new_title": "What's New in Version {version}",
             "whats_new_content": """
                 <h3>Welcome to the new and improved SF FileManager Suite!</h3>
                 <p>This version brings a host of new features and improvements:</p>
@@ -510,7 +474,7 @@ class LocalizationManager:
                     <li><b>Command-Line Interface (CLI):</b> Automate your encryption tasks by running the application from the command line.</li>
                     <li><b>Key File Support for Encryption/Decryption:</b> You can now use generated RSA public/private keys or symmetric keys directly from files for cryptographic operations.</li>
                     <li><b>Improved Key Management:</b> The Key Management tab now provides better tools to view, export, and delete your stored keys.</li>
-                    <li><b>Refined UI/CSS:</b> The application's visual aesthetics have been further polished across all themes for a more modern and consistent look.</li>
+                    <li><b>Refined UI/CSS:</b> The application's visual aesthetics have a been further polished across all themes for a more modern and consistent look.</li>
                 </ul>
                 <p>Thank you for using the application!</p>
             """,
@@ -542,7 +506,6 @@ class LocalizationManager:
             "shredding_complete": "Original file securely shredded.",
             "batch_processing_progress": "Overall Progress: {current}/{total} files ({percentage:.1f}%)",
             "file_processing_status_batch": "Processing file {current_file_index}/{total_files}: {filename}",
-            "select_folder": "Select Folder",
             "operation_cancelled": "Operation cancelled by user.",
             "loading_app": "Loading Application...",
             "initializing_ui": "Initializing User Interface...",
@@ -582,11 +545,34 @@ class LocalizationManager:
             "export_error_title": "Export Error",
             "Time": "Time",
             "Level": "Level",
-            "Message": "Message"
+            "Message": "Message",
+            "password_strength_weak": "Weak: Use a mix of characters.",
+            "password_strength_medium": "Medium: Add numbers and symbols.",
+            "password_strength_strong": "Strong: Longer, complex password.",
+            "decrypt_failed_invalid_password": "Decryption failed: Incorrect password.",
+            "decrypt_failed_corrupt": "Decryption failed: The file is corrupted or not a valid encrypted file.",
+            "file_integrity_tab": "File Integrity",
+            "file_integrity_title": "File Integrity & Password Generator",
+            "file_to_hash": "File to Hash:",
+            "calculate_hash": "Calculate Hash",
+            "sha256_hash": "SHA-256 Hash:",
+            "sha512_hash": "SHA-512 Hash:",
+            "secure_password_generator": "Secure Password Generator",
+            "password_length": "Password Length:",
+            "include_uppercase": "Include Uppercase",
+            "include_numbers": "Include Numbers",
+            "include_symbols": "Include Symbols",
+            "generate_password": "Generate Password",
+            "generated_password": "Generated Password:",
+            "save_settings_as": "Save Settings As...",
+            "load_settings_from": "Load Settings From...",
+            "settings_exported": "Settings exported to {path}",
+            "settings_imported": "Settings imported from {path}"
+            ,
+            "import_export_error": "Error importing/exporting settings: {e}"
         }
         self.translations["en"] = self._default_english_translations
 
-    # --- FIX: Re-formatted get_string method to prevent indentation issues ---
     def get_string(self, key, **kwargs):
         return self.translations.get(self.current_language, self.translations["en"]).get(key, key).format(**kwargs)
 
@@ -628,26 +614,47 @@ class PluginManager:
         self.load_plugins()
     def load_plugins(self):
         self.encryption_plugins.clear()
-        # CRITICAL FIX: Use the PyInstaller-aware PLUGINS_DIR
-        plugins_path = PLUGINS_DIR
-        if not os.path.exists(plugins_path):
-            os.makedirs(plugins_path)
+        
+        logger.info(f"Scanning for plugins in: {PLUGINS_DIR}")
+
+        # Add the plugins directory to Python's import path
+        if PLUGINS_DIR not in sys.path:
+            sys.path.append(PLUGINS_DIR)
+            logger.info(f"Added '{PLUGINS_DIR}' to sys.path.")
+        
+        if not os.path.exists(PLUGINS_DIR):
+            logger.warning(f"Plugins directory not found at {PLUGINS_DIR}. Skipping plugin loading.")
             return
-        for filename in os.listdir(plugins_path):
-            if filename.endswith(".py") and not filename.startswith("__"):
-                try:
-                    # CRITICAL FIX: Use the correct path for importlib.util.spec_from_file_location
-                    spec = importlib.util.spec_from_file_location(filename[:-3], os.path.join(plugins_path, filename))
-                    module = importlib.util.module_from_spec(spec)
-                    sys.modules[filename[:-3]] = module
-                    spec.loader.exec_module(module)
-                    if hasattr(module, 'EncryptorPlugin'):
-                        plugin_instance = module.EncryptorPlugin()
-                        self.encryption_plugins[plugin_instance.name] = plugin_instance
-                        logger.info(f"Loaded plugin: {plugin_instance.name}")
-                except Exception as e:
-                    logger.error(f"Failed to load plugin '{filename}': {e}")
+
+        # New logging to help with debugging the file listing
+        try:
+            plugin_files = [f for f in os.listdir(PLUGINS_DIR) if f.endswith(".py") and not f.startswith("__")]
+            logger.info(f"Found plugin files in directory: {plugin_files}")
+        except FileNotFoundError:
+            logger.error(f"Plugins directory does not exist at {PLUGINS_DIR}.")
+            return
+        except Exception as e:
+            logger.error(f"An error occurred while listing plugin files: {e}")
+            return
+        
+        for filename in plugin_files:
+            try:
+                module_name = filename[:-3]
+                # Use importlib.import_module for more robust import in frozen environments
+                module = importlib.import_module(module_name)
+                
+                if hasattr(module, 'EncryptorPlugin'):
+                    plugin_instance = module.EncryptorPlugin()
+                    self.encryption_plugins[plugin_instance.name] = plugin_instance
+                    logger.info(f"Successfully loaded plugin: {plugin_instance.name} from {filename}")
+                else:
+                    logger.warning(f"Plugin file {filename} does not contain an 'EncryptorPlugin' class.")
+            except ImportError as e:
+                logger.error(f"Failed to import plugin '{filename}': {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Failed to load plugin '{filename}': {e}", exc_info=True)
     def get_available_plugins(self):
+        # Correctly initialize settings if not present
         if "enabled_plugins" not in self.settings:
             self.settings["enabled_plugins"] = {name: True for name in self.encryption_plugins}
         enabled_plugins = self.settings.get("enabled_plugins", {})
@@ -676,7 +683,6 @@ class KeyManager:
             with open(KEY_STORE_FILE, 'w') as f:
                 json.dump(self.keys, f, indent=4)
         except Exception as e:
-        
             logger.error(f"Failed to save key store: {e}")
     def add_key(self, name, type, path):
         original_name = name
@@ -707,7 +713,7 @@ class CryptoEngine(QObject):
     current_file_status = pyqtSignal(str)
     operation_finished = pyqtSignal(object)
     operation_error = pyqtSignal(str)
-    
+
     def __init__(self, is_encrypt_mode, kwargs):
         super().__init__()
         self.is_encrypt_mode = is_encrypt_mode
@@ -732,7 +738,7 @@ class CryptoEngine(QObject):
     def cancel(self):
         self.is_cancelled = True
         logger.info("Worker thread cancellation requested.")
-    
+
     def _derive_key(self, password, salt):
         if not salt:
             raise ValueError("Salt is required for key derivation.")
@@ -756,7 +762,7 @@ class CryptoEngine(QObject):
         except Exception as e:
             logger.error(f"Error loading key from file {key_file_path}: {e}")
             raise ValueError(loc.get_string("key_load_error", e=str(e)))
-    
+
     def _get_files_in_path(self, path):
         if os.path.isfile(path):
             return [path]
@@ -802,7 +808,7 @@ class CryptoEngine(QObject):
                 output_dir = os.path.join(output_base_path, relative_dir)
                 os.makedirs(output_dir, exist_ok=True)
                 final_output_path = os.path.join(output_dir, os.path.basename(file_path) + ".enc")
-                
+
                 with open(file_path, 'rb') as f:
                     plaintext = f.read()
                 original_checksum = None
@@ -821,7 +827,7 @@ class CryptoEngine(QObject):
 
                 salt = secrets.token_bytes(16)
                 iv = secrets.token_bytes(12)
-                
+
                 if key_source == "password":
                     key = self._derive_key(password_or_key_file, salt)
                 else: # key_source == "file"
@@ -833,7 +839,7 @@ class CryptoEngine(QObject):
 
                 with open(final_output_path, 'wb') as f:
                     f.write(encrypted_data)
-                
+
                 meta = {
                     'algorithm': algo_name,
                     'salt': b64encode(salt).decode() if key_source == 'password' else None,
@@ -846,7 +852,7 @@ class CryptoEngine(QObject):
                 }
                 with open(final_output_path + '.meta', 'w') as f:
                     json.dump(meta, f, indent=4)
-                
+
                 if delete_original:
                     self.current_file_status.emit(loc.get_string("file_shredding"))
                     if secure_shredding_passes > 0:
@@ -861,6 +867,7 @@ class CryptoEngine(QObject):
                 self.operation_error.emit(f"Failed to encrypt {os.path.basename(file_path)}: {e}")
             processed_count += 1
             self.progress.emit(int((processed_count / total_files) * 100))
+            QCoreApplication.processEvents() # Keep UI responsive
         return loc.get_string("encryption_complete", count=successful_count)
 
     def _perform_batch_decryption(self):
@@ -925,7 +932,7 @@ class CryptoEngine(QObject):
                     decryptor = Cipher(algorithms.AES(decryption_key), modes.GCM(iv, tag), backend=default_backend()).decryptor()
                     decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
                 except InvalidTag:
-                    raise ValueError(loc.get_string("invalid_password_or_corrupt"))
+                    raise ValueError(loc.get_string("decrypt_failed_invalid_password"))
                 decompressed_data = decrypted_data
                 if compression_algo_meta:
                     temp_decompressed_path = file_path.replace(".enc", "") + ".decomp_temp"
@@ -960,6 +967,7 @@ class CryptoEngine(QObject):
                 self.operation_error.emit(f"Failed to decrypt {os.path.basename(file_path)}: {e}")
             processed_count += 1
             self.progress.emit(int((processed_count / total_files) * 100))
+            QCoreApplication.processEvents() # Keep UI responsive
         return loc.get_string("decryption_complete", count=successful_count)
 
 
@@ -1032,11 +1040,16 @@ class CryptoTab(QWidget):
         pass
     def update_plugin_options(self):
         pass
-        
+
     def setup_ui(self):
         self.input_path_entry = DragDropLineEdit()
         self.output_path_entry = DragDropLineEdit()
-        self.browse_input_button = QPushButton(loc.get_string("select_file_folder"))
+
+        self.browse_input_file_button = QPushButton(loc.get_string("select_file"))
+        self.browse_input_file_button.setIcon(QIcon(os.path.join(ASSETS_DIR, "file.png")))
+        self.browse_input_folder_button = QPushButton(loc.get_string("select_folder"))
+        self.browse_input_folder_button.setIcon(QIcon(os.path.join(ASSETS_DIR, "folder.png")))
+
         self.browse_output_button = QPushButton(loc.get_string("browse"))
         self.algo_dropdown = CustomComboBox()
         self.key_input_type_label = QLabel(loc.get_string("password_input_type"))
@@ -1052,6 +1065,9 @@ class CryptoTab(QWidget):
         self.password_label = QLabel(loc.get_string("password"))
         self.password_entry = QLineEdit()
         self.password_entry.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password_strength_label = QLabel()
+        self.password_strength_label.setStyleSheet("color: grey;")
+
         self.key_file_label = QLabel(loc.get_string("key_file_path"))
         self.key_file_path_entry = DragDropLineEdit()
         self.key_file_path_entry.setReadOnly(True)
@@ -1060,6 +1076,7 @@ class CryptoTab(QWidget):
         self.key_file_path_entry.fileDropped.connect(self.on_key_file_dropped)
         self.action_button = QPushButton()
         self.progress_bar = QProgressBar()
+        self.batch_progress_label = QLabel("")
         self.file_status_label = QLabel(loc.get_string("waiting_for_op"))
         self.file_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.compression_algo_label = QLabel(loc.get_string("compression_algorithm"))
@@ -1071,9 +1088,15 @@ class CryptoTab(QWidget):
         self.delete_original_checkbox = QCheckBox(loc.get_string("delete_original_after_encrypt"))
         self.secure_shredding_passes_label = QLabel(loc.get_string("secure_shredding_passes"))
         self.secure_shredding_passes_entry = QLineEdit("0")
+
         self.layout.addWidget(QLabel(loc.get_string("input_file_folder")), 0, 0)
         self.layout.addWidget(self.input_path_entry, 0, 1, 1, 2)
-        self.layout.addWidget(self.browse_input_button, 0, 3)
+
+        input_browse_layout = QHBoxLayout()
+        input_browse_layout.addWidget(self.browse_input_file_button)
+        input_browse_layout.addWidget(self.browse_input_folder_button)
+        self.layout.addLayout(input_browse_layout, 0, 3)
+
         self.layout.addWidget(QLabel(loc.get_string("output_folder")), 1, 0)
         self.layout.addWidget(self.output_path_entry, 1, 1, 1, 2)
         self.layout.addWidget(self.browse_output_button, 1, 3)
@@ -1085,12 +1108,16 @@ class CryptoTab(QWidget):
         key_input_method_layout.addWidget(self.key_file_radio_button)
         key_input_method_layout.addStretch(1)
         self.layout.addLayout(key_input_method_layout, 3, 0, 1, 4)
+
         self.layout.addWidget(self.password_label, 4, 0)
         self.layout.addWidget(self.password_entry, 4, 1, 1, 3)
-        self.layout.addWidget(self.key_file_label, 5, 0)
-        self.layout.addWidget(self.key_file_path_entry, 5, 1, 1, 2)
-        self.layout.addWidget(self.browse_key_file_button, 5, 3)
-        row_offset = 6
+        self.layout.addWidget(self.password_strength_label, 5, 1, 1, 3)
+
+        self.layout.addWidget(self.key_file_label, 6, 0)
+        self.layout.addWidget(self.key_file_path_entry, 6, 1, 1, 2)
+        self.layout.addWidget(self.browse_key_file_button, 6, 3)
+
+        row_offset = 7
         if self.is_encrypt_mode:
             self.layout.addWidget(self.compression_algo_label, row_offset, 0)
             self.layout.addWidget(self.compression_algo_dropdown, row_offset, 1)
@@ -1103,7 +1130,12 @@ class CryptoTab(QWidget):
             self.layout.addWidget(self.secure_shredding_passes_label, row_offset, 0)
             self.layout.addWidget(self.secure_shredding_passes_entry, row_offset, 1)
             row_offset += 1
+
         self.layout.addWidget(self.action_button, row_offset, 0, 1, 4)
+        row_offset += 1
+
+        # --- NEW: Added batch progress label ---
+        self.layout.addWidget(self.batch_progress_label, row_offset, 0, 1, 4)
         row_offset += 1
         self.layout.addWidget(self.progress_bar, row_offset, 0, 1, 4)
         row_offset += 1
@@ -1113,14 +1145,53 @@ class CryptoTab(QWidget):
     def connect_signals(self):
         self.input_path_entry.fileDropped.connect(self.on_file_dropped)
         self.input_path_entry.folderDropped.connect(self.on_folder_dropped)
-        self.browse_input_button.clicked.connect(self.browse_input)
+        self.browse_input_file_button.clicked.connect(self.browse_input_file)
+        self.browse_input_folder_button.clicked.connect(self.browse_input_folder)
         self.browse_output_button.clicked.connect(self.browse_output)
         self.action_button.clicked.connect(self.start_operation)
         self.delete_original_checkbox.stateChanged.connect(self.toggle_shredding_options)
         self.toggle_shredding_options(self.delete_original_checkbox.checkState())
+        if self.is_encrypt_mode:
+            self.password_entry.textChanged.connect(self.update_password_strength_label)
+    def update_password_strength_label(self, text):
+        strength = self.get_password_strength(text)
+        if strength == "weak":
+            self.password_strength_label.setText(f"{loc.get_string('password_strength')}{loc.get_string('password_strength_weak')}")
+            self.password_strength_label.setStyleSheet("color: red;")
+        elif strength == "medium":
+            self.password_strength_label.setText(f"{loc.get_string('password_strength')}{loc.get_string('password_strength_medium')}")
+            self.password_strength_label.setStyleSheet("color: orange;")
+        elif strength == "strong":
+            self.password_strength_label.setText(f"{loc.get_string('password_strength')}{loc.get_string('password_strength_strong')}")
+            self.password_strength_label.setStyleSheet("color: green;")
+        else:
+            self.password_strength_label.setText("")
+    def get_password_strength(self, password):
+        if not password:
+            return "none"
+        length_score = 0
+        if len(password) >= 8:
+            length_score = 1
+        if len(password) >= 12:
+            length_score = 2
+
+        char_score = 0
+        if any(c.islower() for c in password) and any(c.isupper() for c in password):
+            char_score += 1
+        if any(c.isdigit() for c in password):
+            char_score += 1
+        if any(not c.isalnum() for c in password):
+            char_score += 1
+        total_score = length_score + char_score
+        if total_score >= 4:
+            return "strong"
+        if total_score >= 2:
+            return "medium"
+        return "weak"
     def toggle_key_input_method(self, use_password_checked):
         self.password_label.setVisible(use_password_checked)
         self.password_entry.setVisible(use_password_checked)
+        self.password_strength_label.setVisible(use_password_checked and self.is_encrypt_mode)
         self.key_file_label.setVisible(not use_password_checked)
         self.key_file_path_entry.setVisible(not use_password_checked)
         self.browse_key_file_button.setVisible(not use_password_checked)
@@ -1139,6 +1210,11 @@ class CryptoTab(QWidget):
     def on_file_dropped(self, file_path):
         self.input_path_entry.setText(file_path)
         self.main_window.show_status_message(loc.get_string("status_file_selected", path=os.path.basename(file_path)), 3000)
+        self.try_load_metadata(file_path)
+    def on_folder_dropped(self, folder_path):
+        self.input_path_entry.setText(folder_path)
+        self.main_window.show_status_message(loc.get_string("status_file_selected", path=os.path.basename(folder_path)), 3000)
+    def try_load_metadata(self, file_path):
         if not self.is_encrypt_mode and file_path.endswith('.enc'):
             try:
                 with open(file_path + '.meta', 'r') as f:
@@ -1155,28 +1231,30 @@ class CryptoTab(QWidget):
                 self.main_window.show_status_message(loc.get_string("metadata_not_found"), 5000)
             except Exception as e:
                 self.main_window.show_status_message(loc.get_string("status_metadata_error", e=str(e)), 5000)
-    def on_folder_dropped(self, folder_path):
-        self.input_path_entry.setText(folder_path)
-        self.main_window.show_status_message(loc.get_string("status_file_selected", path=os.path.basename(folder_path)), 3000)
-    def browse_input(self):
+    def browse_input_file(self):
         last_dir = self.app_settings.get("last_input_dir", "")
         file_dialog = QFileDialog(self)
-        file_dialog.setWindowTitle(loc.get_string("select_file_folder"))
+        file_dialog.setWindowTitle(loc.get_string("select_file"))
         file_dialog.setDirectory(last_dir)
-        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
         file_dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        if sys.platform == "darwin" or sys.platform == "linux":
-            file_dialog.setOption(QFileDialog.Option.ShowDirsOnly, False)
-            file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles | QFileDialog.FileMode.DirectoryOnly)
-        else:
-             file_dialog.setOption(QFileDialog.Option.ShowDirsOnly, False)
         if file_dialog.exec():
             selected_path = file_dialog.selectedFiles()[0]
-            if os.path.isdir(selected_path):
-                self.on_folder_dropped(selected_path)
-            else:
-                self.on_file_dropped(selected_path)
-            self.app_settings["last_input_dir"] = os.path.dirname(selected_path) if os.path.isfile(selected_path) else selected_path
+            self.on_file_dropped(selected_path)
+            self.app_settings["last_input_dir"] = os.path.dirname(selected_path)
+            self.main_window.save_settings()
+    def browse_input_folder(self):
+        last_dir = self.app_settings.get("last_input_dir", "")
+        folder_dialog = QFileDialog(self)
+        folder_dialog.setWindowTitle(loc.get_string("select_folder"))
+        folder_dialog.setDirectory(last_dir)
+        folder_dialog.setFileMode(QFileDialog.FileMode.Directory)
+        folder_dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
+        folder_dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        if folder_dialog.exec():
+            selected_path = folder_dialog.selectedFiles()[0]
+            self.on_folder_dropped(selected_path)
+            self.app_settings["last_input_dir"] = selected_path
             self.main_window.save_settings()
     def browse_output(self):
         if path := QFileDialog.getExistingDirectory(self, loc.get_string("select_output_folder")):
@@ -1241,6 +1319,10 @@ class CryptoTab(QWidget):
         self.worker.current_file_status.connect(self.file_status_label.setText)
         self.thread.start()
     def update_file_progress_label(self, current_file_index, total_files, filename):
+        self.batch_progress_label.setText(loc.get_string("batch_processing_progress",
+                                                        current=current_file_index,
+                                                        total=total_files,
+                                                        percentage=(current_file_index / total_files) * 100))
         self.file_status_label.setText(loc.get_string("file_processing_status_batch",
                                                       current_file_index=current_file_index,
                                                       total_files=total_files,
@@ -1438,15 +1520,18 @@ class SettingsTab(QWidget):
         self.log_settings_group_label.setText(loc.get_string("log_file_settings"))
         self.max_log_size_label.setText(loc.get_string("max_log_size_mb"))
         self.enable_log_rotation_checkbox.setText(loc.get_string("enable_log_rotation"))
+        self.export_settings_button.setText(loc.get_string("export_settings"))
+        self.import_settings_button.setText(loc.get_string("import_settings"))
     def setup_ui(self):
         self.language_label = QLabel(loc.get_string("language_wip"))
         self.language_dropdown = CustomComboBox()
         self.language_dropdown.addItem("English")
-        self.language_dropdown.setEnabled(False) # Language switching is not implemented
+        self.language_dropdown.setEnabled(False)
         self.layout.addWidget(self.language_label, 0, 0)
         self.layout.addWidget(self.language_dropdown, 0, 1)
         self.animation_speed_label = QLabel(loc.get_string("animation_speed"))
         self.animation_speed_slider = QSlider(Qt.Orientation.Horizontal)
+
         self.animation_speed_slider.setRange(1, 10)
         self.animation_speed_slider.setValue(5)
         self.animation_speed_slider.setTickInterval(1)
@@ -1486,7 +1571,42 @@ class SettingsTab(QWidget):
         self.enable_log_rotation_checkbox = QCheckBox(loc.get_string("enable_log_rotation"))
         self.enable_log_rotation_checkbox.stateChanged.connect(self.save_log_settings)
         self.layout.addWidget(self.enable_log_rotation_checkbox, 8, 0, 1, 2)
-        self.layout.setRowStretch(9, 1)
+
+        # --- NEW: Export/Import Buttons ---
+        export_import_layout = QHBoxLayout()
+        self.export_settings_button = QPushButton(loc.get_string("export_settings"))
+        self.import_settings_button = QPushButton(loc.get_string("import_settings"))
+        self.export_settings_button.clicked.connect(self.export_settings)
+        self.import_settings_button.clicked.connect(self.import_settings)
+        export_import_layout.addWidget(self.export_settings_button)
+        export_import_layout.addWidget(self.import_settings_button)
+        self.layout.addLayout(export_import_layout, 9, 0, 1, 3)
+
+        self.layout.setRowStretch(10, 1)
+
+    def export_settings(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, loc.get_string("save_settings_as"), "sf_settings.json", "JSON Files (*.json)")
+        if file_path:
+            try:
+                with open(file_path, 'w') as f:
+                    json.dump(self.app_settings, f, indent=4)
+                QMessageBox.information(self, loc.get_string("success"), loc.get_string("settings_exported", path=file_path))
+            except Exception as e:
+                QMessageBox.critical(self, loc.get_string("error"), loc.get_string("import_export_error", e=str(e)))
+
+    def import_settings(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, loc.get_string("load_settings_from"), "", "JSON Files (*.json)")
+        if file_path:
+            try:
+                with open(file_path, 'r') as f:
+                    new_settings = json.load(f)
+                self.main_window.app_settings.update(new_settings)
+                self.main_window.save_settings()
+                self.load_settings_to_ui()
+                self.main_window.update_all_tabs_plugin_options()
+                QMessageBox.information(self, loc.get_string("success"), loc.get_string("settings_imported", path=file_path))
+            except Exception as e:
+                QMessageBox.critical(self, loc.get_string("error"), loc.get_string("import_export_error", e=str(e)))
 
     def change_font(self, font_name):
         self.app_settings["font"] = font_name
@@ -1543,20 +1663,147 @@ class SettingsTab(QWidget):
         self.confirm_on_exit_checkbox.setChecked(self.app_settings.get("confirm_on_exit", False))
         self.update_default_encryption_algo_options()
 
+# --- NEW: File Integrity and Password Generator Tab ---
+class HashAndGenTab(QWidget):
+    def __init__(self, main_window):
+        super().__init__()
+        self.main_window = main_window
+        self.layout = QGridLayout(self)
+        self.setLayout(self.layout)
+        self.setup_ui()
+        self.retranslate_ui()
+
+    def setup_ui(self):
+        # --- File Integrity Section ---
+        self.hash_title_label = QLabel(loc.get_string("file_integrity_title"))
+        self.hash_title_label.setObjectName("TitleLabel")
+        self.file_to_hash_label = QLabel(loc.get_string("file_to_hash"))
+        self.file_to_hash_entry = DragDropLineEdit()
+        self.browse_hash_file_button = QPushButton(loc.get_string("browse"))
+        self.browse_hash_file_button.clicked.connect(self.browse_hash_file)
+        self.calculate_hash_button = QPushButton(loc.get_string("calculate_hash"))
+        self.calculate_hash_button.clicked.connect(self.calculate_hash)
+        self.sha256_label = QLabel(loc.get_string("sha256_hash"))
+        self.sha256_output = QLineEdit()
+        self.sha256_output.setReadOnly(True)
+        self.sha512_label = QLabel(loc.get_string("sha512_hash"))
+        self.sha512_output = QLineEdit()
+        self.sha512_output.setReadOnly(True)
+
+        self.layout.addWidget(self.hash_title_label, 0, 0, 1, 3)
+        self.layout.addWidget(self.file_to_hash_label, 1, 0)
+        self.layout.addWidget(self.file_to_hash_entry, 1, 1)
+        self.layout.addWidget(self.browse_hash_file_button, 1, 2)
+        self.layout.addWidget(self.calculate_hash_button, 2, 0, 1, 3)
+        self.layout.addWidget(self.sha256_label, 3, 0)
+        self.layout.addWidget(self.sha256_output, 3, 1, 1, 2)
+        self.layout.addWidget(self.sha512_label, 4, 0)
+        self.layout.addWidget(self.sha512_output, 4, 1, 1, 2)
+
+        # --- Secure Password Generator Section ---
+        self.password_gen_title_label = QLabel(loc.get_string("secure_password_generator"))
+        self.password_gen_title_label.setObjectName("SectionLabel")
+        self.password_length_label = QLabel(loc.get_string("password_length"))
+        self.password_length_spinbox = QSpinBox()
+        self.password_length_spinbox.setRange(8, 64)
+        self.password_length_spinbox.setValue(16)
+        self.include_uppercase_checkbox = QCheckBox(loc.get_string("include_uppercase"))
+        self.include_numbers_checkbox = QCheckBox(loc.get_string("include_numbers"))
+        self.include_symbols_checkbox = QCheckBox(loc.get_string("include_symbols"))
+        self.generate_password_button = QPushButton(loc.get_string("generate_password"))
+        self.generate_password_button.clicked.connect(self.generate_password)
+        self.generated_password_label = QLabel(loc.get_string("generated_password"))
+        self.generated_password_output = QLineEdit()
+        self.generated_password_output.setReadOnly(True)
+
+        self.layout.addWidget(self.password_gen_title_label, 5, 0, 1, 3)
+        self.layout.addWidget(self.password_length_label, 6, 0)
+        self.layout.addWidget(self.password_length_spinbox, 6, 1, 1, 2)
+        self.layout.addWidget(self.include_uppercase_checkbox, 7, 0, 1, 3)
+        self.layout.addWidget(self.include_numbers_checkbox, 8, 0, 1, 3)
+        self.layout.addWidget(self.include_symbols_checkbox, 9, 0, 1, 3)
+        self.layout.addWidget(self.generate_password_button, 10, 0, 1, 3)
+        self.layout.addWidget(self.generated_password_label, 11, 0)
+        self.layout.addWidget(self.generated_password_output, 11, 1, 1, 2)
+
+        self.layout.setRowStretch(12, 1)
+
+    def retranslate_ui(self):
+        self.hash_title_label.setText(loc.get_string("file_integrity_title"))
+        self.file_to_hash_label.setText(loc.get_string("file_to_hash"))
+        self.browse_hash_file_button.setText(loc.get_string("browse"))
+        self.calculate_hash_button.setText(loc.get_string("calculate_hash"))
+        self.sha256_label.setText(loc.get_string("sha256_hash"))
+        self.sha512_label.setText(loc.get_string("sha512_hash"))
+        self.password_gen_title_label.setText(loc.get_string("secure_password_generator"))
+        self.password_length_label.setText(loc.get_string("password_length"))
+        self.include_uppercase_checkbox.setText(loc.get_string("include_uppercase"))
+        self.include_numbers_checkbox.setText(loc.get_string("include_numbers"))
+        self.include_symbols_checkbox.setText(loc.get_string("include_symbols"))
+        self.generate_password_button.setText(loc.get_string("generate_password"))
+        self.generated_password_label.setText(loc.get_string("generated_password"))
+
+    def browse_hash_file(self):
+        if path := QFileDialog.getOpenFileName(self, loc.get_string("select_file"))[0]:
+            self.file_to_hash_entry.setText(path)
+
+    def calculate_hash(self):
+        file_path = self.file_to_hash_entry.text()
+        if not os.path.exists(file_path):
+            QMessageBox.warning(self, loc.get_string("error"), "File not found.")
+            return
+
+        hasher_256 = hashlib.sha256()
+        hasher_512 = hashlib.sha512()
+
+        try:
+            with open(file_path, 'rb') as f:
+                while chunk := f.read(4096):
+                    hasher_256.update(chunk)
+                    hasher_512.update(chunk)
+            self.sha256_output.setText(hasher_256.hexdigest())
+            self.sha512_output.setText(hasher_512.hexdigest())
+            self.main_window.show_status_message(loc.get_string("success"), 3000)
+        except Exception as e:
+            self.main_window.show_status_message(f"Hashing failed: {e}", 5000)
+            self.sha256_output.setText("Error")
+            self.sha512_output.setText("Error")
+            QMessageBox.critical(self, loc.get_string("error"), f"An error occurred during hashing: {e}")
+
+    def generate_password(self):
+        length = self.password_length_spinbox.value()
+        chars = string.ascii_lowercase
+        if self.include_uppercase_checkbox.isChecked():
+            chars += string.ascii_uppercase
+        if self.include_numbers_checkbox.isChecked():
+            chars += string.digits
+        if self.include_symbols_checkbox.isChecked():
+            chars += string.punctuation
+
+        if not chars:
+            QMessageBox.warning(self, loc.get_string("warning"), "Please select at least one character type.")
+            return
+
+        password = ''.join(secrets.choice(chars) for _ in range(length))
+        self.generated_password_output.setText(password)
+        self.main_window.show_status_message(loc.get_string("success"), 3000)
+
 
 class AboutTab(QWidget):
     def __init__(self, plugin_manager, app_settings, main_window):
         super().__init__()
         self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
-        self.layout = QGridLayout(self)
-        self.setLayout(self.layout)
+        self.github_button = None
+        self.mail_button = None
+        self.layout = QGridLayout(self)  # <-- Add this line
+        self.setLayout(self.layout)      # <-- Add this line
         self.setup_ui()
+        self.retranslate_ui()
     def setup_ui(self):
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
         content_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.logo_label = QLabel()
-        # CRITICAL FIX: Load assets using the PyInstaller-aware ASSETS_DIR and correct path
         logo_path = os.path.join(ASSETS_DIR, SF_LOGO_FILENAME)
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path).scaledToHeight(128, Qt.TransformationMode.SmoothTransformation)
@@ -1584,36 +1831,37 @@ class AboutTab(QWidget):
         contact_layout = QHBoxLayout()
         contact_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         contact_layout.setSpacing(20)
-        github_button = QPushButton()
-        # CRITICAL FIX: Load assets using the PyInstaller-aware ASSETS_DIR and correct path
+        self.github_button = QPushButton()
         github_logo_path = os.path.join(ASSETS_DIR, GITHUB_LOGO_FILENAME)
         if os.path.exists(github_logo_path):
             github_pixmap = QPixmap(github_logo_path).scaledToHeight(32, Qt.TransformationMode.SmoothTransformation)
-            github_button.setIcon(QIcon(github_pixmap))
+            self.github_button.setIcon(QIcon(github_pixmap))
         else:
-            logger.warning(f"Github logo not found at {github_logo_path}. Using embedded SVG.")
-            github_button.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(b64decode(GITHUB_SVG.encode())))))
-        github_button.setObjectName("open_github_button")
-        github_button.clicked.connect(lambda: webbrowser.open(GITHUB_URL))
-        contact_layout.addWidget(github_button)
-        mail_button = QPushButton()
-        mail_button.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(b64decode(MAIL_SVG.encode())))))
-        mail_button.setObjectName("contact_developer_button")
-        mail_button.clicked.connect(lambda: webbrowser.open(f"mailto:{DEVELOPER_EMAIL}"))
-        contact_layout.addWidget(mail_button)
-        content_layout.addLayout(contact_layout)
+            logger.warning(f"Github logo not found at {github_logo_path}. Using placeholder.")
+        self.github_button.setObjectName("open_github_button")
+        self.github_button.clicked.connect(lambda: webbrowser.open(GITHUB_URL))
+        contact_layout.addWidget(self.github_button)
+        self.mail_button = QPushButton()
+        mail_path = os.path.join(ASSETS_DIR, "mail.png")
+        if os.path.exists(mail_path):
+            mail_pixmap = QPixmap(mail_path)
+            self.mail_button.setIcon(QIcon(mail_pixmap))
+        self.mail_button.setObjectName("contact_developer_button")
+        self.mail_button.clicked.connect(lambda: webbrowser.open(f"mailto:{DEVELOPER_EMAIL}"))
+        contact_layout.addWidget(self.mail_button)
         self.layout.setRowStretch(0, 1)
         self.layout.setColumnStretch(0, 1)
         self.layout.addWidget(content_widget, 1, 1)
         self.layout.setRowStretch(2, 1)
         self.layout.setColumnStretch(2, 1)
-        self.retranslate_ui() # Call retranslate to set button text
     def retranslate_ui(self):
         self.app_name_label.setText(loc.get_string("app_name"))
         self.version_label.setText(f'{loc.get_string("version")}{APP_VERSION}')
         self.developer_label.setText(f'{loc.get_string("developed_by")}{DEVELOPER_NAME}')
-        self.findChild(QPushButton, "open_github_button").setText(loc.get_string("open_github"))
-        self.findChild(QPushButton, "contact_developer_button").setText(loc.get_string("contact_developer"))
+        if self.github_button:
+            self.github_button.setText(loc.get_string("open_github"))
+        if self.mail_button:
+            self.mail_button.setText(loc.get_string("contact_developer"))
 
 
 class LogViewer(QWidget):
@@ -1817,81 +2065,106 @@ class SFManagerModernUI(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         self.setCentralWidget(main_container)
-        # CRITICAL FIX: Load assets using the PyInstaller-aware ASSETS_DIR and correct path
         icon_path = os.path.join(ASSETS_DIR, ICON_FILENAME)
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
         else:
             logger.warning(f"Application icon not found at {icon_path}.")
+
         self.sidebar_widget = QWidget()
         self.sidebar_widget.setObjectName("Sidebar")
+        self.sidebar_widget.setFixedWidth(200)
+
         self.sidebar_layout = QVBoxLayout(self.sidebar_widget)
         self.sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.sidebar_layout.setContentsMargins(0, 20, 0, 0)
+
         self.stacked_widget = QStackedWidget()
         self.stacked_widget.setObjectName("MainContentArea")
+
         self.encrypt_tab = EncryptTab(self.plugin_manager, self.app_settings, self)
         self.decrypt_tab = DecryptTab(self.plugin_manager, self.app_settings, self)
         self.gen_keys_tab = GenerateKeysTab(self.key_manager, self.plugin_manager, self.app_settings, self)
         self.key_management_tab = KeyManagementTab(self.key_manager, self.plugin_manager, self.app_settings, self)
         self.plugins_tab = PluginsTab(self.plugin_manager, self.app_settings, self)
         self.settings_tab = SettingsTab(self.plugin_manager, self.app_settings, self)
+        
+        # --- NEW: File Integrity & Password Generator Tab ---
+        self.hash_and_gen_tab = HashAndGenTab(self)
+        
         self.about_tab = AboutTab(self.plugin_manager, self.app_settings, self)
         self.log_viewer = LogViewer()
+
         self.stacked_widget.addWidget(self.encrypt_tab)
         self.stacked_widget.addWidget(self.decrypt_tab)
         self.stacked_widget.addWidget(self.gen_keys_tab)
         self.stacked_widget.addWidget(self.key_management_tab)
+        self.stacked_widget.addWidget(self.hash_and_gen_tab) # New tab
         self.stacked_widget.addWidget(self.plugins_tab)
         self.stacked_widget.addWidget(self.settings_tab)
         self.stacked_widget.addWidget(self.log_viewer)
         self.stacked_widget.addWidget(self.about_tab)
+
         self.nav_buttons = [
-            self.create_nav_button(loc.get_string("encrypt_tab"), 0),
-            self.create_nav_button(loc.get_string("decrypt_tab"), 1),
-            self.create_nav_button(loc.get_string("generate_keys_tab"), 2),
-            self.create_nav_button(loc.get_string("key_management_tab"), 3),
-            self.create_nav_button(loc.get_string("plugins_tab"), 4),
-            self.create_nav_button(loc.get_string("settings_tab"), 5),
-            self.create_nav_button(loc.get_string("log_viewer"), 6),
-            self.create_nav_button(loc.get_string("about_tab"), 7),
+            self.create_nav_button(loc.get_string("encrypt_tab"), 0, "upload.png"),
+            self.create_nav_button(loc.get_string("decrypt_tab"), 1, "decrypt.png"),
+            self.create_nav_button(loc.get_string("generate_keys_tab"), 2, "encrypt.png"),
+            self.create_nav_button(loc.get_string("key_management_tab"), 3, "encrypt.png"),
+            self.create_nav_button(loc.get_string("file_integrity_tab"), 4, "fingerprint.png"), # New nav button
+            self.create_nav_button(loc.get_string("plugins_tab"), 5, "plugins.png"),
+            self.create_nav_button(loc.get_string("settings_tab"), 6, "settings.png"),
+            self.create_nav_button(loc.get_string("log_viewer"), 7, "log.png"),
+            self.create_nav_button(loc.get_string("about_tab"), 8, "about.png"),
         ]
+
+        # Removed the toggle button from the layout
+        # self.sidebar_layout.addWidget(self.toggle_button, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         for btn in self.nav_buttons:
             self.sidebar_layout.addWidget(btn)
         self.sidebar_layout.addStretch(1)
+
         main_layout.addWidget(self.sidebar_widget)
         main_layout.addWidget(self.stacked_widget, 1)
+
         self.nav_buttons[0].setChecked(True)
         self.log_signal.connect(self.log_viewer.append_log)
 
-    def create_nav_button(self, text, index):
+    # The toggle_sidebar method and related properties were removed in a previous step,
+    # as per the user's request to fix UI issues related to the expandable menu.
+
+    def create_nav_button(self, text, index, icon_filename=""):
         btn = QPushButton(text)
-        btn.setObjectName(f"NavButton_{index}")
+        btn.setObjectName(f"NavButton")
         btn.setCheckable(True)
         btn.setAutoExclusive(True)
+        btn.setProperty("fullText", text)
+        btn.setFixedWidth(180) # Set a fixed width for the expanded state
+        btn.setToolTip(text)
         btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(index))
+
+        if icon_filename:
+            icon_path = os.path.join(ASSETS_DIR, icon_filename)
+            if os.path.exists(icon_path):
+                pixmap = QPixmap(icon_path)
+                btn.setIcon(QIcon(pixmap))
+                btn.setIconSize(QSize(24, 24))
+
         return btn
 
     def retranslate_ui(self):
+        # Fix: Ensure all tabs have their retranslate_ui methods called.
         self.setWindowTitle(loc.get_string("app_name"))
-        for i, btn in enumerate(self.nav_buttons):
-            if i == 0: btn.setText(loc.get_string("encrypt_tab"))
-            elif i == 1: btn.setText(loc.get_string("decrypt_tab"))
-            elif i == 2: btn.setText(loc.get_string("generate_keys_tab"))
-            elif i == 3: btn.setText(loc.get_string("key_management_tab"))
-            elif i == 4: btn.setText(loc.get_string("plugins_tab"))
-            elif i == 5: btn.setText(loc.get_string("settings_tab"))
-            elif i == 6: btn.setText(loc.get_string("log_viewer"))
-            elif i == 7: btn.setText(loc.get_string("about_tab"))
+
         self.encrypt_tab.retranslate_ui()
         self.decrypt_tab.retranslate_ui()
         self.gen_keys_tab.retranslate_ui()
         self.key_management_tab.retranslate_ui()
         self.plugins_tab.retranslate_ui()
         self.settings_tab.retranslate_ui()
+        self.hash_and_gen_tab.retranslate_ui() # Fix: Added call for the new tab.
         self.about_tab.retranslate_ui()
         self.log_viewer.log_table.setHorizontalHeaderLabels([loc.get_string("Time"), loc.get_string("Level"), loc.get_string("Message")])
-        
+
     def load_settings(self):
         settings = {
             "font": "Segoe UI",
@@ -1969,9 +2242,13 @@ class SFManagerModernUI(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     
-    # Check for and create assets folder
-    # CRITICAL FIX: Use the PyInstaller-aware ASSETS_DIR for initial creation
-    os.makedirs(ASSETS_DIR, exist_ok=True)
+    # --- Fix for PyInstaller folder creation ---
+    # The application can only create directories when run as a script.
+    # The PyInstaller command's --add-data flag handles this for the compiled executable.
+    if not getattr(sys, 'frozen', False):
+        os.makedirs(PLUGINS_DIR, exist_ok=True)
+        os.makedirs(ASSETS_DIR, exist_ok=True)
+
     if not os.path.exists(os.path.join(ASSETS_DIR, SF_LOGO_FILENAME)):
         logger.warning(f"SF Manager logo not found at {os.path.join(ASSETS_DIR, SF_LOGO_FILENAME)}. Please add it to the assets folder.")
     if not os.path.exists(os.path.join(ASSETS_DIR, GITHUB_LOGO_FILENAME)):
@@ -1983,4 +2260,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
