@@ -659,8 +659,14 @@ class PluginManager:
             self.settings["enabled_plugins"] = {name: True for name in self.encryption_plugins}
         enabled_plugins = self.settings.get("enabled_plugins", {})
         return [name for name, is_enabled in enabled_plugins.items() if is_enabled and name in self.encryption_plugins]
+    
     def get_all_plugins(self):
         return self.encryption_plugins
+
+    def get_plugin_key_length(self, name):
+        plugin = self.encryption_plugins.get(name)
+        return getattr(plugin, 'key_length_bits', 256) # Default to 256 for safety
+
     def set_plugin_status(self, name, is_enabled):
         enabled_plugins = self.settings.get("enabled_plugins", {})
         enabled_plugins[name] = is_enabled
@@ -827,7 +833,7 @@ class CryptoEngine(QObject):
 
                 salt = secrets.token_bytes(16)
                 iv = secrets.token_bytes(12)
-
+                
                 if key_source == "password":
                     key = self._derive_key(password_or_key_file, salt)
                 else: # key_source == "file"
@@ -867,7 +873,6 @@ class CryptoEngine(QObject):
                 self.operation_error.emit(f"Failed to encrypt {os.path.basename(file_path)}: {e}")
             processed_count += 1
             self.progress.emit(int((processed_count / total_files) * 100))
-            QCoreApplication.processEvents() # Keep UI responsive
         return loc.get_string("encryption_complete", count=successful_count)
 
     def _perform_batch_decryption(self):
@@ -967,7 +972,6 @@ class CryptoEngine(QObject):
                 self.operation_error.emit(f"Failed to decrypt {os.path.basename(file_path)}: {e}")
             processed_count += 1
             self.progress.emit(int((processed_count / total_files) * 100))
-            QCoreApplication.processEvents() # Keep UI responsive
         return loc.get_string("decryption_complete", count=successful_count)
 
 
@@ -1026,6 +1030,9 @@ class CryptoTab(QWidget):
         self.worker = None
         self.thread = None
         self.layout = QGridLayout(self)
+        # Add optimal content margins for perfect view
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(15)
         self.setLayout(self.layout)
         self.setup_ui()
         self.connect_signals()
@@ -1035,7 +1042,34 @@ class CryptoTab(QWidget):
     def log(self, message, level="info"):
         self.main_window.log_signal.emit(message, level)
     def retranslate_ui(self):
-        pass
+        self.browse_input_file_button.setText(loc.get_string("select_file"))
+        self.browse_input_folder_button.setText(loc.get_string("select_folder"))
+        self.browse_output_button.setText(loc.get_string("browse"))
+        self.key_input_type_label.setText(loc.get_string("password_input_type"))
+        self.password_radio_button.setText(loc.get_string("use_password"))
+        self.key_file_radio_button.setText(loc.get_string("use_key_file"))
+        self.password_label.setText(loc.get_string("password"))
+        self.key_file_label.setText(loc.get_string("key_file_path"))
+        self.browse_key_file_button.setText(loc.get_string("browse"))
+        self.file_status_label.setText(loc.get_string("waiting_for_op"))
+        self.input_path_entry.setToolTip(loc.get_string("tooltip_input_file"))
+        self.output_path_entry.setToolTip(loc.get_string("tooltip_output_folder"))
+        self.algo_dropdown.setToolTip(loc.get_string("tooltip_algorithm"))
+        self.password_entry.setToolTip(loc.get_string("tooltip_password"))
+        
+        if self.is_encrypt_mode:
+            self.action_button.setText(loc.get_string("encrypt_files"))
+            self.compression_algo_label.setText(loc.get_string("compression_algorithm"))
+            self.compression_level_label.setText(loc.get_string("compression_level"))
+            self.checksum_checkbox.setText(loc.get_string("file_integrity_check"))
+            self.delete_original_checkbox.setText(loc.get_string("delete_original_after_encrypt"))
+            self.secure_shredding_passes_label.setText(loc.get_string("secure_shredding_passes"))
+            self.delete_original_checkbox.setToolTip(loc.get_string("tooltip_delete_original"))
+            self.compression_level_spinbox.setToolTip("Compression level from 0-9. -1 for default.")
+            self.secure_shredding_passes_spinbox.setToolTip("Number of passes to securely overwrite the file.")
+        else:
+            self.action_button.setText(loc.get_string("decrypt_files"))
+            
     def update_expert_mode_ui(self):
         pass
     def update_plugin_options(self):
@@ -1083,11 +1117,15 @@ class CryptoTab(QWidget):
         self.compression_algo_dropdown = CustomComboBox()
         self.compression_algo_dropdown.addItems([loc.get_string("no_compression"), loc.get_string("gzip"), loc.get_string("bzip2"), loc.get_string("lzma")])
         self.compression_level_label = QLabel(loc.get_string("compression_level"))
-        self.compression_level_entry = QLineEdit("-1")
+        self.compression_level_spinbox = QSpinBox()
+        self.compression_level_spinbox.setRange(-1, 9)
+        self.compression_level_spinbox.setValue(-1)
         self.checksum_checkbox = QCheckBox(loc.get_string("file_integrity_check"))
         self.delete_original_checkbox = QCheckBox(loc.get_string("delete_original_after_encrypt"))
         self.secure_shredding_passes_label = QLabel(loc.get_string("secure_shredding_passes"))
-        self.secure_shredding_passes_entry = QLineEdit("0")
+        self.secure_shredding_passes_spinbox = QSpinBox()
+        self.secure_shredding_passes_spinbox.setRange(0, 100)
+        self.secure_shredding_passes_spinbox.setValue(0)
 
         self.layout.addWidget(QLabel(loc.get_string("input_file_folder")), 0, 0)
         self.layout.addWidget(self.input_path_entry, 0, 1, 1, 2)
@@ -1122,13 +1160,13 @@ class CryptoTab(QWidget):
             self.layout.addWidget(self.compression_algo_label, row_offset, 0)
             self.layout.addWidget(self.compression_algo_dropdown, row_offset, 1)
             self.layout.addWidget(self.compression_level_label, row_offset, 2)
-            self.layout.addWidget(self.compression_level_entry, row_offset, 3)
+            self.layout.addWidget(self.compression_level_spinbox, row_offset, 3)
             row_offset += 1
             self.layout.addWidget(self.checksum_checkbox, row_offset, 0, 1, 2)
             self.layout.addWidget(self.delete_original_checkbox, row_offset, 2, 1, 2)
             row_offset += 1
             self.layout.addWidget(self.secure_shredding_passes_label, row_offset, 0)
-            self.layout.addWidget(self.secure_shredding_passes_entry, row_offset, 1)
+            self.layout.addWidget(self.secure_shredding_passes_spinbox, row_offset, 1)
             row_offset += 1
 
         self.layout.addWidget(self.action_button, row_offset, 0, 1, 4)
@@ -1206,7 +1244,7 @@ class CryptoTab(QWidget):
     def toggle_shredding_options(self, state):
         is_checked = (state == Qt.CheckState.Checked)
         self.secure_shredding_passes_label.setEnabled(is_checked)
-        self.secure_shredding_passes_entry.setEnabled(is_checked)
+        self.secure_shredding_passes_spinbox.setEnabled(is_checked)
     def on_file_dropped(self, file_path):
         self.input_path_entry.setText(file_path)
         self.main_window.show_status_message(loc.get_string("status_file_selected", path=os.path.basename(file_path)), 3000)
@@ -1275,10 +1313,10 @@ class CryptoTab(QWidget):
         output_path = self.output_path_entry.text()
         algo_name = self.algo_dropdown.currentText()
         compression_algo = self.compression_algo_dropdown.currentText() if self.is_encrypt_mode else loc.get_string("no_compression")
-        compression_level = int(self.compression_level_entry.text()) if self.is_encrypt_mode and self.compression_level_entry.text().isdigit() else -1
+        compression_level = self.compression_level_spinbox.value() if self.is_encrypt_mode else -1
         perform_checksum = self.checksum_checkbox.isChecked() if self.is_encrypt_mode else False
         delete_original = self.delete_original_checkbox.isChecked() if self.is_encrypt_mode else False
-        secure_shredding_passes = int(self.secure_shredding_passes_entry.text()) if delete_original and self.secure_shredding_passes_entry.text().isdigit() else 0
+        secure_shredding_passes = self.secure_shredding_passes_spinbox.value() if delete_original else 0
         key_source = "password" if self.password_radio_button.isChecked() else "file"
         password_or_key_file = self.password_entry.text() if key_source == "password" else self.key_file_path_entry.text()
         params = {
@@ -1348,6 +1386,7 @@ class EncryptTab(CryptoTab):
         super().__init__(*args, **kwargs, is_encrypt_mode=True)
         self.retranslate_ui()
     def retranslate_ui(self):
+        super().retranslate_ui()
         self.action_button.setText(loc.get_string("encrypt_files"))
         self.input_path_entry.setToolTip(loc.get_string("tooltip_input_file"))
         self.output_path_entry.setToolTip(loc.get_string("tooltip_output_folder"))
@@ -1360,6 +1399,7 @@ class DecryptTab(CryptoTab):
         super().__init__(*args, **kwargs, is_encrypt_mode=False)
         self.retranslate_ui()
     def retranslate_ui(self):
+        super().retranslate_ui()
         self.action_button.setText(loc.get_string("decrypt_files"))
         self.input_path_entry.setToolTip(loc.get_string("tooltip_input_file"))
         self.output_path_entry.setToolTip(loc.get_string("tooltip_output_folder"))
@@ -1375,6 +1415,9 @@ class GenerateKeysTab(QWidget):
         self.main_window = main_window
         self.symmetric_key_b64 = None
         self.layout = QGridLayout(self)
+        # Add optimal content margins for perfect view
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(15)
         self.setLayout(self.layout)
         self.setup_ui()
         self.retranslate_ui()
@@ -1406,6 +1449,7 @@ class GenerateKeysTab(QWidget):
         self.save_symmetric_key_button.setToolTip(loc.get_string("tooltip_save_key"))
         self.copy_key_button.setText(loc.get_string("copy_keys_clipboard"))
         self.algo_label.setText(loc.get_string("algorithm_key_generation"))
+
     def update_plugin_options(self):
         current_algo = self.algo_dropdown.currentText()
         self.algo_dropdown.clear()
@@ -1432,7 +1476,9 @@ class GenerateKeysTab(QWidget):
         self.symmetric_key_b64 = None
         self.key_output_textbox.clear()
         try:
-            key = secrets.token_bytes(32)
+            key_length_bits = self.plugin_manager.get_plugin_key_length(algo_name)
+            key_length_bytes = key_length_bits // 8
+            key = secrets.token_bytes(key_length_bytes)
             self.symmetric_key_b64 = b64encode(key).decode()
             self.key_output_textbox.setText(f"--- {algo_name} KEY (Base64) ---\n{self.symmetric_key_b64}")
             QMessageBox.information(self, loc.get_string("key_generation"), loc.get_string("key_generation_success", algo_name=algo_name))
@@ -1462,6 +1508,9 @@ class PluginsTab(QWidget):
         super().__init__()
         self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
         self.layout = QVBoxLayout(self)
+        # Add optimal content margins for perfect view
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(15)
         self.setLayout(self.layout)
         self.setup_ui()
         self.retranslate_ui()
@@ -1506,6 +1555,9 @@ class SettingsTab(QWidget):
         super().__init__()
         self.plugin_manager, self.app_settings, self.main_window = plugin_manager, app_settings, main_window
         self.layout = QGridLayout(self)
+        # Add optimal content margins for perfect view
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(15)
         self.setLayout(self.layout)
         self.setup_ui()
         self.load_settings_to_ui()
@@ -1669,6 +1721,9 @@ class HashAndGenTab(QWidget):
         super().__init__()
         self.main_window = main_window
         self.layout = QGridLayout(self)
+        # Add optimal content margins for perfect view
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(15)
         self.setLayout(self.layout)
         self.setup_ui()
         self.retranslate_ui()
@@ -1796,6 +1851,9 @@ class AboutTab(QWidget):
         self.github_button = None
         self.mail_button = None
         self.layout = QGridLayout(self)  # <-- Add this line
+        # Add optimal content margins for perfect view
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(15)
         self.setLayout(self.layout)      # <-- Add this line
         self.setup_ui()
         self.retranslate_ui()
@@ -1941,6 +1999,9 @@ class KeyManagementTab(QWidget):
         super().__init__()
         self.key_manager, self.plugin_manager, self.app_settings, self.main_window = key_manager, plugin_manager, app_settings, main_window
         self.layout = QGridLayout(self)
+        # Add optimal content margins for perfect view
+        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(15)
         self.setLayout(self.layout)
         self.setup_ui()
         self.retranslate_ui()
@@ -2057,7 +2118,11 @@ class SFManagerModernUI(QMainWindow):
 
     def setup_ui(self):
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(800, 600)
+        
+        # Simple window sizing for testing
+        self.setMinimumSize(1200, 800)
+        self.resize(1400, 900)
+        
         self.setStyleSheet(MODERN_STYLESHEET)
         main_container = QWidget()
         main_container.setObjectName("MainContainer")
@@ -2073,7 +2138,113 @@ class SFManagerModernUI(QMainWindow):
 
         self.sidebar_widget = QWidget()
         self.sidebar_widget.setObjectName("Sidebar")
-        self.sidebar_widget.setFixedWidth(200)
+        self.sidebar_widget.setFixedWidth(250)  # Increased from 200 for better proportions
+
+        self.sidebar_layout = QVBoxLayout(self.sidebar_widget)
+        self.sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.sidebar_layout.setContentsMargins(0, 20, 0, 0)
+
+        self.stacked_widget = QStackedWidget()
+        self.stacked_widget.setObjectName("MainContentArea")
+
+        self.encrypt_tab = EncryptTab(self.plugin_manager, self.app_settings, self)
+        self.decrypt_tab = DecryptTab(self.plugin_manager, self.app_settings, self)
+        self.gen_keys_tab = GenerateKeysTab(self.key_manager, self.plugin_manager, self.app_settings, self)
+        self.key_management_tab = KeyManagementTab(self.key_manager, self.plugin_manager, self.app_settings, self)
+        self.plugins_tab = PluginsTab(self.plugin_manager, self.app_settings, self)
+        self.settings_tab = SettingsTab(self.plugin_manager, self.app_settings, self)
+        
+        # --- NEW: File Integrity & Password Generator Tab ---
+        self.hash_and_gen_tab = HashAndGenTab(self)
+        
+        self.about_tab = AboutTab(self.plugin_manager, self.app_settings, self)
+        self.log_viewer = LogViewer()
+
+        self.stacked_widget.addWidget(self.encrypt_tab)
+        self.stacked_widget.addWidget(self.decrypt_tab)
+        self.stacked_widget.addWidget(self.gen_keys_tab)
+        self.stacked_widget.addWidget(self.key_management_tab)
+        self.stacked_widget.addWidget(self.hash_and_gen_tab)  # New tab added here
+        self.stacked_widget.addWidget(self.plugins_tab)
+        self.stacked_widget.addWidget(self.settings_tab)
+        self.stacked_widget.addWidget(self.log_viewer)
+        self.stacked_widget.addWidget(self.about_tab)
+
+        self.nav_buttons = [
+            self.create_nav_button(loc.get_string("encrypt_tab"), 0, "encrypt.png"),
+            self.create_nav_button(loc.get_string("decrypt_tab"), 1, "decrypt.png"),
+            self.create_nav_button(loc.get_string("generate_keys_tab"), 2, "fingerprint.png"),
+            self.create_nav_button(loc.get_string("key_management_tab"), 3, "encrypt.png"),
+            self.create_nav_button(loc.get_string("file_integrity_tab"), 4, "fingerprint.png"), # New nav button
+            self.create_nav_button(loc.get_string("plugins_tab"), 5, "plugins.png"),
+            self.create_nav_button(loc.get_string("settings_tab"), 6, "settings.png"),
+            self.create_nav_button(loc.get_string("log_viewer"), 7, "log.png"),
+            self.create_nav_button(loc.get_string("about_tab"), 8, "about.png"),
+        ]
+
+        # Removed the toggle button from the layout
+        # self.sidebar_layout.addWidget(self.toggle_button, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        for btn in self.nav_buttons:
+            self.sidebar_layout.addWidget(btn)
+        self.sidebar_layout.addStretch(1)
+
+        main_layout.addWidget(self.sidebar_widget)
+        main_layout.addWidget(self.stacked_widget, 1)
+
+        self.nav_buttons[0].setChecked(True)
+        self.stacked_widget.setCurrentIndex(0)  # Ensure first tab is displayed
+        self.log_signal.connect(self.log_viewer.append_log)
+
+    def optimize_window_size(self):
+        """Optimize window size and position for perfect view across different screen resolutions"""
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            screen_geometry = screen.availableGeometry()
+            screen_width = screen_geometry.width()
+            screen_height = screen_geometry.height()
+            
+            # Calculate optimal window size based on screen resolution
+            if screen_width >= 1920 and screen_height >= 1080:  # 1080p or higher
+                window_width = 1400
+                window_height = 900
+                min_width = 1200
+                min_height = 800
+            elif screen_width >= 1366 and screen_height >= 768:  # 720p-1080p range
+                window_width = min(1200, int(screen_width * 0.8))
+                window_height = min(800, int(screen_height * 0.8))
+                min_width = 1000
+                min_height = 700
+            else:  # Smaller screens
+                window_width = min(1000, int(screen_width * 0.9))
+                window_height = min(700, int(screen_height * 0.9))
+                min_width = 800
+                min_height = 600
+            
+            # Set window size
+            self.setMinimumSize(min_width, min_height)
+            self.resize(window_width, window_height)
+            
+            # Center the window on screen
+            window_geometry = self.frameGeometry()
+            center_point = screen_geometry.center()
+            window_geometry.moveCenter(center_point)
+            self.move(window_geometry.topLeft())
+        else:
+            # Fallback if screen detection fails
+            self.setMinimumSize(1200, 800)
+            self.resize(1400, 900)
+
+        # Create main layout after window optimization  
+        main_container = QWidget()
+        main_container.setObjectName("MainContainer")
+        main_layout = QHBoxLayout(main_container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        self.setCentralWidget(main_container)
+
+        self.sidebar_widget = QWidget()
+        self.sidebar_widget.setObjectName("Sidebar")
+        self.sidebar_widget.setFixedWidth(250)  # Increased from 200 for better proportions
 
         self.sidebar_layout = QVBoxLayout(self.sidebar_widget)
         self.sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -2127,6 +2298,7 @@ class SFManagerModernUI(QMainWindow):
         main_layout.addWidget(self.stacked_widget, 1)
 
         self.nav_buttons[0].setChecked(True)
+        self.stacked_widget.setCurrentIndex(0)  # Ensure first tab is displayed
         self.log_signal.connect(self.log_viewer.append_log)
 
     # The toggle_sidebar method and related properties were removed in a previous step,
@@ -2152,7 +2324,6 @@ class SFManagerModernUI(QMainWindow):
         return btn
 
     def retranslate_ui(self):
-        # Fix: Ensure all tabs have their retranslate_ui methods called.
         self.setWindowTitle(loc.get_string("app_name"))
 
         self.encrypt_tab.retranslate_ui()
@@ -2161,9 +2332,11 @@ class SFManagerModernUI(QMainWindow):
         self.key_management_tab.retranslate_ui()
         self.plugins_tab.retranslate_ui()
         self.settings_tab.retranslate_ui()
-        self.hash_and_gen_tab.retranslate_ui() # Fix: Added call for the new tab.
+        self.hash_and_gen_tab.retranslate_ui()
         self.about_tab.retranslate_ui()
         self.log_viewer.log_table.setHorizontalHeaderLabels([loc.get_string("Time"), loc.get_string("Level"), loc.get_string("Message")])
+        for btn in self.nav_buttons:
+            btn.setText(loc.get_string(f"{btn.property('fullText').replace(' ', '_').lower()}_tab"))
 
     def load_settings(self):
         settings = {
@@ -2254,9 +2427,17 @@ def main():
     if not os.path.exists(os.path.join(ASSETS_DIR, GITHUB_LOGO_FILENAME)):
         logger.warning(f"Github logo not found at {os.path.join(ASSETS_DIR, GITHUB_LOGO_FILENAME)}. Please add it to the assets folder.")
     
-    main_win = SFManagerModernUI()
-    main_win.show()
-    sys.exit(app.exec())
+    try:
+        main_win = SFManagerModernUI()
+        print("Main window created successfully")  # Debug print
+        main_win.show()  # Changed from showMaximized() to show() to use our optimized window sizing
+        print("Window shown successfully")  # Debug print
+        sys.exit(app.exec())
+    except Exception as e:
+        print(f"Error during application startup: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
