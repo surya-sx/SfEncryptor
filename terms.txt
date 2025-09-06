@@ -1,0 +1,36 @@
+GRANT OF LICENSE
+This software, "Sf Encryptor," is licensed, not sold. You are granted a limited, non-exclusive, non-transferable, revocable license to install and use this software for your personal, non-commercial use only. All rights not expressly granted herein are reserved by Surya B and Abishek Raj PR.
+
+RESTRICTIONS
+You agree not to:
+Modify, adapt, translate, reverse engineer, decompile, disassemble, or attempt to derive the source code of the software.
+Distribute, sublicense, lease, rent, loan, or otherwise transfer the software to any third party.
+Use the software for any illegal activities, including but not limited to the concealment of stolen, pirated, or sensitive data that violates applicable law.
+Remove, alter, or obscure any copyright, trademark, or other proprietary notices on the software.
+
+USE AT YOUR OWN RISK
+This application is provided "as-is" without any warranties, express or implied. The authors, Surya B and Abishek Raj PR, are not responsible for any damage, data loss, or legal consequences resulting from the use or misuse of this software. You assume all risks associated with the use of this software.
+
+ENCRYPTION RESPONSIBILITY
+It is the user's sole responsibility to safely store their encryption key(s) and passwords. If you lose your encryption key or password, your data will be permanently inaccessible. We do not offer a recovery service, nor can we recover lost keys or data.
+
+DATA PRIVACY
+This application performs all encryption and decryption locally on your machine. It does not transmit or store your data externally, nor does it collect any personal data or usage information.
+
+OWNERSHIP
+The "SF FileManager" software, including all intellectual property rights, remains the sole property of Surya B and Abishek Raj PR.
+
+UPDATES
+We may provide software updates from time to time. You are not obligated to install updates, but they may include security patches, bug fixes, or new features. We reserve the right to discontinue updates at any time.
+
+SUPPORT
+This software is provided without guaranteed technical support. Any support provided is at the sole discretion of Surya B and Abishek Raj PR.
+
+TERMINATION
+This license is effective until terminated. Your rights under this license will terminate automatically without notice from Surya B and Abishek Raj PR if you fail to comply with any of these terms. Upon termination, you must cease all use of the software and destroy all copies, full or partial.
+
+ACCEPTANCE
+By installing or using this application, you agree to be bound by these terms. If you do not agree with these terms, do not install or use the application.
+
+SF FileManager
+Copyright (c) 2025 Surya B
