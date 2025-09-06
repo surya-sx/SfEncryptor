@@ -60,19 +60,6 @@ SF-Encryptor is a powerful, user-friendly file encryption application built with
 
 ---
 
-## 📸 Screenshots
-
-### Main Interface
-![Main Interface](docs/screenshots/main-interface.png)
-
-### Encryption Tab
-![Encryption Tab](docs/screenshots/encrypt-tab.png)
-
-### Settings Panel
-![Settings Panel](docs/screenshots/settings-tab.png)
-
----
-
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -283,10 +270,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-- **Documentation**: [Wiki](https://github.com/sf-development/sf-encryptor/wiki)
 - **Issues**: [GitHub Issues](https://github.com/sf-development/sf-encryptor/issues)
-- **Email**: support@sf-encryptor.com
-- **Discord**: [SF Development Community](https://discord.gg/sf-dev)
+- **Email**: sfencryptor@gmail.com
 
 ---
 
